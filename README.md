@@ -69,6 +69,10 @@ A web-based tool for measuring transparent areas in PNG images and calculating m
 }
 ```
 
+### Samples
+![Sample Image](assets/sample1.jpg)
+![Sample Image](assets/sample2.jpg)
+
 ## Notes
 
 - The tool works best with PNG images that have clear transparent areas

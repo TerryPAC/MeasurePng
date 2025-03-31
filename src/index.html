@@ -110,6 +110,60 @@
             margin-bottom: 10px;
             box-sizing: border-box;
         }
+
+        .legend-container {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 4px;
+        }
+
+        .legend-container h3 {
+            margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 16px;
+            color: #333;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .color-box {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            border-width: 2px;
+            border-style: solid;
+            background: transparent;
+        }
+
+        .color-box.green {
+            border-color: rgb(0, 200, 0);
+        }
+
+        .color-box.red {
+            border-color: rgb(240, 2, 2);
+        }
+
+        .color-box.magenta {
+            border-color: rgb(240, 0, 240);
+        }
+
+        .readme-link {
+            display: block;
+            text-align: center;
+            color: #2196F3;
+            text-decoration: none;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+
+        .readme-link:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 
@@ -123,12 +177,28 @@
         </div>
         <div class="control-panel">
             <h1>Transparent Area Measurement Tool</h1>
+            <a href="https://terrypac.github.io/MeasurePng/" class="readme-link" target="_blank">Documentation</a>
             <input type="file" id="imageInput" accept="image/png">
 
             <div class="input-group">
                 <input type="number" id="productWidth" min="1" placeholder="Product Width">
                 <input type="number" id="productHeight" min="1" placeholder="Product Height">
                 <input type="number" id="bleed" min="0" placeholder="Bleed">
+            </div>
+
+            <div class="legend-container">
+                <div class="legend-item">
+                    <div class="color-box green"></div>
+                    <span>Transparent Area</span>
+                </div>
+                <div class="legend-item">
+                    <div class="color-box red"></div>
+                    <span>Printable Rect</span>
+                </div>
+                <div class="legend-item">
+                    <div class="color-box magenta"></div>
+                    <span>Display Area</span>
+                </div>
             </div>
 
             <button id="analyzeButton" class="primary-button">Start Detection</button>

@@ -523,8 +523,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const offsets = corners.map((corner, index) => {
             const originalCorner = originalCorners[index];
             return {
-                x: Math.round(corner.x - originalCorner.x),
-                y: Math.round(corner.y - originalCorner.y)
+                x: Math.abs(corner.x - originalCorner.x) > 1 ? Math.round(corner.x - originalCorner.x) : 0,
+                y: Math.abs(corner.y - originalCorner.y) > 1 ? Math.round(corner.y - originalCorner.y) : 0
             };
         });
 
