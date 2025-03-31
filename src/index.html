@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>PNG透明区域测量工具</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .display-area {
+            flex: 1;
+            padding: 20px;
+            background: #f9f9f9;
+            min-width: 60%;
+        }
+
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            height: calc(100vh - 40px);
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .canvas-container canvas {
+            position: absolute;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .control-panel {
+            width: 400px;
+            padding: 20px;
+            background: white;
+            box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #4CAF50;
+            margin-top: 0;
+        }
+
+        .result-info {
+            margin: 10px 0;
+            font-family: monospace;
+            background: #e7f3fe;
+            border-left: 6px solid #2196F3;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .primary-button {
+            margin: 10px 0;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            width: 100%;
+        }
+
+        .primary-button:hover {
+            background-color: #45a049;
+        }
+
+        input[type="file"] {
+            margin: 10px 0;
+            display: block;
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        .input-group {
+            margin-bottom: 10px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .input-group input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="display-area">
+            <div class="canvas-container">
+                <canvas id="resultCanvas"></canvas>
+                <canvas id="interactiveCanvas"></canvas>
+            </div>
+        </div>
+        <div class="control-panel">
+            <h1>透明区域测量工具</h1>
+            <input type="file" id="imageInput" accept="image/png">
+
+            <div class="input-group">
+                <input type="number" id="productWidth" min="1" placeholder="Product Width">
+                <input type="number" id="productHeight" min="1" placeholder="Product Height">
+                <input type="number" id="bleed" min="0" placeholder="Bleed">
+            </div>
+
+            <button id="analyzeButton" class="primary-button">开始检测</button>
+            <button id="confirmButton" class="primary-button" style="display: none;">确认检测区域</button>
+            <button id="calculateMarginsButton" class="primary-button" style="display: none;">计算Margins</button>
+            <div class="result-info" id="poInfo"></div>
+            <div class="result-info" id="templateInfo"></div>
+        </div>
+    </div>
+    <script src="measureTransparentArea.js"></script>
+</body>
+
+</html>
