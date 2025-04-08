@@ -1,13 +1,13 @@
-// 创建图片选择器
-function createImageSelector() {
+// Create image selector
+const createImageSelector = () => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/png';
     return input;
 }
 
-// 图片加载处理
-function loadImage(file) {
+// Image loading handler
+const loadImage = (file) => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -20,8 +20,8 @@ function loadImage(file) {
     });
 }
 
-// 检测透明区域
-function detectTransparentArea(img) {
+// Detect transparent area
+const detectTransparentArea = (img) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     canvas.width = img.width;
@@ -36,7 +36,7 @@ function detectTransparentArea(img) {
     let maxX = 0;
     let maxY = 0;
 
-    // 遍历像素查找透明区域边界
+    // Iterate through pixels to find transparent area boundaries
     for (let y = 10; y < canvas.height - 10; y++) {
         for (let x = 10; x < canvas.width - 10; x++) {
             const alpha = data[(y * canvas.width + x) * 4 + 3];
@@ -57,26 +57,25 @@ function detectTransparentArea(img) {
     };
 }
 
-// 根据宽高比计算最佳矩形框
-function calculateAspectRatioRect(transparentArea, aspectRatio, bleedRatio) {
+// Calculate best rectangle based on aspect ratio
+const calculateAspectRatioRect = (transparentArea, aspectRatio, bleedRatio) => {
     const { x, y, width, height } = transparentArea;
 
     let newWidth, newHeight;
     const currentRatio = width / height;
 
-    // 判断当前矩形是宽度优先还是高度优先来适应目标宽高比
+    // Determine if current rectangle should prioritize width or height to match target aspect ratio
     if (currentRatio > aspectRatio) {
         // Too wide, need to heighten
         newWidth = width;
         newHeight = newWidth / aspectRatio;
-
     } else {
         // Too tall, need to widen
         newHeight = height;
         newWidth = newHeight * aspectRatio;
     }
 
-    // 计算新矩形的中心点（保持与原透明区域中心对齐）
+    // Calculate new rectangle center point (keep aligned with original transparent area center)
     const centerX = x + width / 2;
     const centerY = y + height / 2;
 
@@ -85,7 +84,7 @@ function calculateAspectRatioRect(transparentArea, aspectRatio, bleedRatio) {
     const finalWidth = newWidth + 2 * bleeding;
     const finalHeight = newHeight + 2 * bleeding;
 
-    // 计算最终矩形的左上角坐标
+    // Calculate final rectangle top-left coordinates
     const finalX = centerX - finalWidth / 2;
     const finalY = centerY - finalHeight / 2;
 
@@ -97,26 +96,28 @@ function calculateAspectRatioRect(transparentArea, aspectRatio, bleedRatio) {
     };
 }
 
-// 在文件开头添加新的全局变量
-let corners = [];
-let isDragging = false;
-let selectedCorner = null;
-let interactiveCtx;
-let finalRect = null;
-let transparentRect = null; // 添加透明区域矩形
-let isTransparentAreaModified = false; // 添加标记，用于判断用户是否修改了透明区域
-let selectedEdge = null; // 添加选中的边
-let originalMousePos = null; // 添加鼠标原始位置
+// Add global variables at the beginning of the file
+const state = {
+    corners: [],
+    isDragging: false,
+    selectedCorner: null,
+    interactiveCtx: null,
+    finalRect: null,
+    transparentRect: null,
+    isTransparentAreaModified: false,
+    selectedEdge: null,
+    originalMousePos: null
+};
 
-// 绘制结果
-function drawResult(img, transparentArea, drawFinal = false) {
+// Draw result
+const drawResult = (img, transparentArea, drawFinal = false) => {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     canvas.width = img.width;
     canvas.height = img.height;
 
-    // 绘制棋盘格背景
-    const tileSize = 5; // 棋盘格大小
+    // Draw checkerboard background
+    const tileSize = 5; // Checkerboard tile size
     for (let y = 0; y < canvas.height; y += tileSize) {
         for (let x = 0; x < canvas.width; x += tileSize) {
             ctx.fillStyle = (x + y) % (tileSize * 2) === 0 ? '#ffffff' : '#e0e0e0';
@@ -124,10 +125,10 @@ function drawResult(img, transparentArea, drawFinal = false) {
         }
     }
 
-    // 绘制原图
+    // Draw original image
     ctx.drawImage(img, 0, 0);
 
-    // 绘制透明区域矩形框（绿色）
+    // Draw transparent area rectangle (green)
     ctx.strokeStyle = 'green';
     ctx.lineWidth = 1;
     ctx.strokeRect(
@@ -137,107 +138,106 @@ function drawResult(img, transparentArea, drawFinal = false) {
         transparentArea.height
     );
 
-    // 只有在drawFinal为true时才绘制最终的红色矩形框
-    if (drawFinal && finalRect) {
+    // Only draw the final red rectangle when drawFinal is true
+    if (drawFinal && state.finalRect) {
         ctx.strokeStyle = 'red';
         ctx.lineWidth = 1;
         ctx.strokeRect(
-            finalRect.x,
-            finalRect.y,
-            finalRect.width,
-            finalRect.height
+            state.finalRect.x,
+            state.finalRect.y,
+            state.finalRect.width,
+            state.finalRect.height
         );
 
-        // 初始化四个顶点坐标
-        corners = [
-            { x: finalRect.x, y: finalRect.y },
-            { x: finalRect.x + finalRect.width, y: finalRect.y },
-            { x: finalRect.x + finalRect.width, y: finalRect.y + finalRect.height },
-            { x: finalRect.x, y: finalRect.y + finalRect.height }
+        // Initialize four corner coordinates
+        state.corners = [
+            { x: state.finalRect.x, y: state.finalRect.y },
+            { x: state.finalRect.x + state.finalRect.width, y: state.finalRect.y },
+            { x: state.finalRect.x + state.finalRect.width, y: state.finalRect.y + state.finalRect.height },
+            { x: state.finalRect.x, y: state.finalRect.y + state.finalRect.height }
         ];
     }
 
     return canvas;
 }
 
-// 在 drawResult 函数后添加新的函数
-function drawCorners() {
-    if (!interactiveCtx || corners.length !== 4) return;
+// Add new function after drawResult function
+const drawCorners = () => {
+    if (!state.interactiveCtx || state.corners.length !== 4) return;
 
-    interactiveCtx.clearRect(0, 0, interactiveCtx.canvas.width, interactiveCtx.canvas.height);
+    state.interactiveCtx.clearRect(0, 0, state.interactiveCtx.canvas.width, state.interactiveCtx.canvas.height);
 
+    state.interactiveCtx.strokeStyle = '#FF00FF';
+    state.interactiveCtx.lineWidth = 2;
 
-    interactiveCtx.strokeStyle = '#FF00FF';
-    interactiveCtx.lineWidth = 2;
-
-    // 绘制连接线
-    interactiveCtx.beginPath();
-    interactiveCtx.moveTo(corners[0].x, corners[0].y);
+    // Draw connecting lines
+    state.interactiveCtx.beginPath();
+    state.interactiveCtx.moveTo(state.corners[0].x, state.corners[0].y);
     for (let i = 1; i <= 4; i++) {
-        interactiveCtx.lineTo(corners[i % 4].x, corners[i % 4].y);
+        state.interactiveCtx.lineTo(state.corners[i % 4].x, state.corners[i % 4].y);
     }
-    interactiveCtx.stroke();
+    state.interactiveCtx.stroke();
 
-    interactiveCtx.beginPath();
-    interactiveCtx.moveTo((corners[0].x + corners[1].x) / 2, (corners[0].y + corners[1].y) / 2);
-    interactiveCtx.lineTo((corners[2].x + corners[3].x) / 2, (corners[2].y + corners[3].y) / 2);
-    interactiveCtx.stroke();
+    state.interactiveCtx.beginPath();
+    state.interactiveCtx.moveTo((state.corners[0].x + state.corners[1].x) / 2, (state.corners[0].y + state.corners[1].y) / 2);
+    state.interactiveCtx.lineTo((state.corners[2].x + state.corners[3].x) / 2, (state.corners[2].y + state.corners[3].y) / 2);
+    state.interactiveCtx.stroke();
 
-    interactiveCtx.beginPath();
-    interactiveCtx.moveTo((corners[3].x + corners[0].x) / 2, (corners[3].y + corners[0].y) / 2);
-    interactiveCtx.lineTo((corners[1].x + corners[2].x) / 2, (corners[1].y + corners[2].y) / 2);
-    interactiveCtx.stroke();
+    state.interactiveCtx.beginPath();
+    state.interactiveCtx.moveTo((state.corners[3].x + state.corners[0].x) / 2, (state.corners[3].y + state.corners[0].y) / 2);
+    state.interactiveCtx.lineTo((state.corners[1].x + state.corners[2].x) / 2, (state.corners[1].y + state.corners[2].y) / 2);
+    state.interactiveCtx.stroke();
 
-    // 绘制顶点
-    corners.forEach((corner, index) => {
-        interactiveCtx.beginPath();
-        interactiveCtx.arc(corner.x, corner.y, 8, 0, Math.PI * 2);
-        interactiveCtx.fillStyle = '#00FF00';
-        interactiveCtx.fill();
-        interactiveCtx.strokeStyle = '#000000';
-        interactiveCtx.lineWidth = 2;
-        interactiveCtx.stroke();
+    // Draw vertices
+    state.corners.forEach((corner, index) => {
+        state.interactiveCtx.beginPath();
+        state.interactiveCtx.arc(corner.x, corner.y, 8, 0, Math.PI * 2);
+        state.interactiveCtx.fillStyle = '#00FF00';
+        state.interactiveCtx.fill();
+        state.interactiveCtx.strokeStyle = '#000000';
+        state.interactiveCtx.lineWidth = 2;
+        state.interactiveCtx.stroke();
     });
 }
 
-// 添加新的函数用于计算canvas的缩放
-function calculateCanvasScale(imageWidth, imageHeight, containerWidth, containerHeight) {
+// Add new function to calculate canvas scaling
+const calculateCanvasScale = (imageWidth, imageHeight, containerWidth, containerHeight) => {
     const scaleX = containerWidth / imageWidth;
     const scaleY = containerHeight / imageHeight;
-    return Math.min(scaleX, scaleY, 1); // 不超过原始大小
+    return Math.min(scaleX, scaleY, 1); // Do not exceed original size
 }
 
-// 添加检查鼠标是否在边上的函数
-function findClosestEdge(mousePos) {
-    if (!transparentRect) return null;
+// Add function to check if mouse is on edge
+const findClosestEdge = (mousePos) => {
+    if (!state.transparentRect) return null;
 
-    const tolerance = 10; // 检测范围
+    const tolerance = 10; // Detection range
     const edges = [
-        { // 上边
+        { // Top edge
             line: {
-                x1: transparentRect.x, y1: transparentRect.y,
-                x2: transparentRect.x + transparentRect.width, y2: transparentRect.y
+                x1: state.transparentRect.x, y1: state.transparentRect.y,
+                x2: state.transparentRect.x + state.transparentRect.width, y2: state.transparentRect.y
             },
             type: 'top'
         },
-        { // 右边
+        { // Right edge
             line: {
-                x1: transparentRect.x + transparentRect.width, y1: transparentRect.y,
-                x2: transparentRect.x + transparentRect.width, y2: transparentRect.y + transparentRect.height
+                x1: state.transparentRect.x + state.transparentRect.width, y1: state.transparentRect.y,
+                x2: state.transparentRect.x + state.transparentRect.width, y2: state.transparentRect.y + state.transparentRect.height
             },
             type: 'right'
         },
-        { // 下边
+        { // Bottom edge
             line: {
-                x1: transparentRect.x, y1: transparentRect.y + transparentRect.height,
-                x2: transparentRect.x + transparentRect.width, y2: transparentRect.y + transparentRect.height
+                x1: state.transparentRect.x, y1: state.transparentRect.y + state.transparentRect.height,
+                x2: state.transparentRect.x + state.transparentRect.width, y2: state.transparentRect.y + state.transparentRect.height
             },
             type: 'bottom'
         },
-        { // 左边
+        { // Left edge
             line: {
-                x1: transparentRect.x, y1: transparentRect.y,
-                x2: transparentRect.x, y2: transparentRect.y + transparentRect.height
+                x1: state.transparentRect.x, y1: state.transparentRect.y,
+                x2: state.transparentRect.x, y2: state.transparentRect.y + state.transparentRect.height
             },
             type: 'left'
         }
@@ -252,8 +252,8 @@ function findClosestEdge(mousePos) {
     return null;
 }
 
-// 添加点到线段距离计算函数
-function pointToLineDistance(point, line) {
+// Add function to calculate point to line distance
+const pointToLineDistance = (point, line) => {
     const A = point.x - line.x1;
     const B = point.y - line.y1;
     const C = line.x2 - line.x1;
@@ -261,11 +261,7 @@ function pointToLineDistance(point, line) {
 
     const dot = A * C + B * D;
     const lenSq = C * C + D * D;
-    let param = -1;
-
-    if (lenSq !== 0) {
-        param = dot / lenSq;
-    }
+    let param = lenSq !== 0 ? dot / lenSq : -1;
 
     let xx, yy;
 
@@ -286,11 +282,10 @@ function pointToLineDistance(point, line) {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
-function toFloat(value, precision = 6) {
-    return parseFloat(value.toFixed(precision));
-}
+// Utility functions
+const toFloat = (value, precision = 6) => parseFloat(value.toFixed(precision));
 
-function getMousePos(canvas, evt) {
+const getMousePos = (canvas, evt) => {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
@@ -300,227 +295,252 @@ function getMousePos(canvas, evt) {
     };
 }
 
-function findClosestCorner(mousePos) {
-    return corners.find(corner => {
+const findClosestCorner = (mousePos) => {
+    return state.corners.find(corner => {
         const distance = Math.sqrt(
             Math.pow(corner.x - mousePos.x, 2) +
             Math.pow(corner.y - mousePos.y, 2)
         );
-        return distance < 15; // 增加检测范围
+        return distance < 15; // Increase detection range
     });
 }
 
-// 初始化事件监听
+// Initialize event listeners
 document.addEventListener('DOMContentLoaded', () => {
-    const imageInput = document.getElementById('imageInput');
-    const productWidthInput = document.getElementById('productWidth');
-    const productHeightInput = document.getElementById('productHeight');
-    const bleedInput = document.getElementById('bleed');
-    const analyzeButton = document.getElementById('analyzeButton');
-    const confirmButton = document.getElementById('confirmButton');
-    const poInfo = document.getElementById('poInfo');
-    const templateInfo = document.getElementById('templateInfo');
-    const calculateMarginsButton = document.getElementById('calculateMarginsButton');
-    const resultCanvas = document.getElementById('resultCanvas');
-    const interactiveCanvas = document.getElementById('interactiveCanvas');
-    interactiveCtx = interactiveCanvas.getContext('2d');
+    // DOM elements
+    const elements = {
+        imageInput: document.getElementById('imageInput'),
+        productWidthInput: document.getElementById('productWidth'),
+        productHeightInput: document.getElementById('productHeight'),
+        bleedInput: document.getElementById('bleed'),
+        analyzeButton: document.getElementById('analyzeButton'),
+        confirmButton: document.getElementById('confirmButton'),
+        poInfo: document.getElementById('poInfo'),
+        templateInfo: document.getElementById('templateInfo'),
+        calculateMarginsButton: document.getElementById('calculateMarginsButton'),
+        resultCanvas: document.getElementById('resultCanvas'),
+        interactiveCanvas: document.getElementById('interactiveCanvas')
+    };
 
+    state.interactiveCtx = elements.interactiveCanvas.getContext('2d');
     let selectedImage = null;
 
-    // 监听文件选择
-    imageInput.addEventListener('change', async (e) => {
+    // Reset application state
+    const resetState = () => {
+        state.transparentRect = null;
+        state.finalRect = null;
+        state.isTransparentAreaModified = false;
+        elements.confirmButton.style.display = 'none';
+        elements.poInfo.querySelector('.info-content').textContent = '';
+        elements.templateInfo.querySelector('.info-content').textContent = '';
+        elements.calculateMarginsButton.style.display = 'none';
+    };
+
+    // Listen for file selection
+    elements.imageInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
             selectedImage = await loadImage(file);
-            // 重置状态
-            transparentRect = null;
-            finalRect = null;
-            isTransparentAreaModified = false;
-            confirmButton.style.display = 'none';
-            poInfo.textContent = '';
-            templateInfo.textContent = '';
-            calculateMarginsButton.style.display = 'none';
+            resetState();
         }
     });
 
-    // 修改鼠标事件监听
-    interactiveCanvas.addEventListener('mousedown', (e) => {
-        const mousePos = getMousePos(interactiveCanvas, e);
-        if (finalRect) {
-            selectedCorner = findClosestCorner(mousePos);
-            if (selectedCorner) {
-                isDragging = true;
+    // Mouse event handlers
+    const handleMouseDown = (e) => {
+        const mousePos = getMousePos(elements.interactiveCanvas, e);
+        if (state.finalRect) {
+            state.selectedCorner = findClosestCorner(mousePos);
+            if (state.selectedCorner) {
+                state.isDragging = true;
             }
-        } else if (transparentRect) {
-            selectedEdge = findClosestEdge(mousePos);
-            if (selectedEdge) {
-                isDragging = true;
-                originalMousePos = mousePos;
-                isTransparentAreaModified = true;
+        } else if (state.transparentRect) {
+            state.selectedEdge = findClosestEdge(mousePos);
+            if (state.selectedEdge) {
+                state.isDragging = true;
+                state.originalMousePos = mousePos;
+                state.isTransparentAreaModified = true;
             }
         }
-    });
+    };
 
-    interactiveCanvas.addEventListener('mousemove', (e) => {
-        const mousePos = getMousePos(interactiveCanvas, e);
+    const handleMouseMove = (e) => {
+        const mousePos = getMousePos(elements.interactiveCanvas, e);
 
-        if (finalRect) {
+        if (state.finalRect) {
             const hoveredCorner = findClosestCorner(mousePos);
-            interactiveCanvas.style.cursor = hoveredCorner ? 'pointer' : 'default';
+            elements.interactiveCanvas.style.cursor = hoveredCorner ? 'pointer' : 'default';
 
-            if (isDragging && selectedCorner) {
-                selectedCorner.x = mousePos.x;
-                selectedCorner.y = mousePos.y;
+            if (state.isDragging && state.selectedCorner) {
+                state.selectedCorner.x = mousePos.x;
+                state.selectedCorner.y = mousePos.y;
                 drawCorners();
             }
-        } else if (transparentRect) {
+        } else if (state.transparentRect) {
             const hoveredEdge = findClosestEdge(mousePos);
-            interactiveCanvas.style.cursor = hoveredEdge ? 'move' : 'default';
+            elements.interactiveCanvas.style.cursor = hoveredEdge ? 'move' : 'default';
 
-            if (isDragging && selectedEdge && originalMousePos) {
-                const dx = mousePos.x - originalMousePos.x;
-                const dy = mousePos.y - originalMousePos.y;
+            if (state.isDragging && state.selectedEdge && state.originalMousePos) {
+                const dx = mousePos.x - state.originalMousePos.x;
+                const dy = mousePos.y - state.originalMousePos.y;
 
-                switch (selectedEdge) {
+                switch (state.selectedEdge) {
                     case 'left':
-                        transparentRect.width -= dx;
-                        transparentRect.x += dx;
+                        state.transparentRect.width -= dx;
+                        state.transparentRect.x += dx;
                         break;
                     case 'right':
-                        transparentRect.width = mousePos.x - transparentRect.x;
+                        state.transparentRect.width = mousePos.x - state.transparentRect.x;
                         break;
                     case 'top':
-                        transparentRect.height -= dy;
-                        transparentRect.y += dy;
+                        state.transparentRect.height -= dy;
+                        state.transparentRect.y += dy;
                         break;
                     case 'bottom':
-                        transparentRect.height = mousePos.y - transparentRect.y;
+                        state.transparentRect.height = mousePos.y - state.transparentRect.y;
                         break;
                 }
 
-                originalMousePos = mousePos;
+                state.originalMousePos = mousePos;
 
-                // 清除两个画布
-                resultCanvas.getContext('2d').clearRect(0, 0, resultCanvas.width, resultCanvas.height);
-                interactiveCtx.clearRect(0, 0, interactiveCanvas.width, interactiveCanvas.height);
+                // Clear both canvases
+                elements.resultCanvas.getContext('2d').clearRect(0, 0, elements.resultCanvas.width, elements.resultCanvas.height);
+                state.interactiveCtx.clearRect(0, 0, elements.interactiveCanvas.width, elements.interactiveCanvas.height);
 
-                // 重新绘制原图和透明区域
-                resultCanvas.getContext('2d').drawImage(selectedImage, 0, 0);
-                const resultImage = drawResult(selectedImage, transparentRect);
-                resultCanvas.getContext('2d').drawImage(resultImage, 0, 0);
+                // Redraw original image and transparent area
+                elements.resultCanvas.getContext('2d').drawImage(selectedImage, 0, 0);
+                const resultImage = drawResult(selectedImage, state.transparentRect);
+                elements.resultCanvas.getContext('2d').drawImage(resultImage, 0, 0);
             }
         }
+    };
+
+    const resetMouseState = () => {
+        state.isDragging = false;
+        state.selectedCorner = null;
+        state.selectedEdge = null;
+        state.originalMousePos = null;
+    };
+
+    elements.interactiveCanvas.addEventListener('mousedown', handleMouseDown);
+    elements.interactiveCanvas.addEventListener('mousemove', handleMouseMove);
+    elements.interactiveCanvas.addEventListener('mouseup', resetMouseState);
+    elements.interactiveCanvas.addEventListener('mouseleave', resetMouseState);
+
+    // Copy button functionality
+    document.querySelectorAll('.copy-button').forEach(button => {
+        button.addEventListener('click', async () => {
+            const targetId = button.getAttribute('data-target');
+            const targetElement = document.getElementById(targetId);
+            const textToCopy = targetElement.querySelector('.info-content').textContent.trim();
+
+            try {
+                await navigator.clipboard.writeText(textToCopy);
+                // Show copy success visual feedback
+                const originalColor = button.style.color;
+                button.style.color = '#4CAF50';
+                setTimeout(() => { button.style.color = originalColor; }, 1000);
+            } catch (err) {
+                alert('Copy failed!');
+            }
+        });
     });
 
-    interactiveCanvas.addEventListener('mouseup', () => {
-        isDragging = false;
-        selectedCorner = null;
-        selectedEdge = null;
-        originalMousePos = null;
-    });
-
-    interactiveCanvas.addEventListener('mouseleave', () => {
-        isDragging = false;
-        selectedCorner = null;
-        selectedEdge = null;
-        originalMousePos = null;
-    });
-
-    // 监听分析按钮点击
-    analyzeButton.addEventListener('click', () => {
+    // Analyze button click
+    elements.analyzeButton.addEventListener('click', () => {
         if (!selectedImage) {
-            alert('请先选择一个PNG图片！');
+            alert('Please choose a png first!');
             return;
         }
 
-        // 检测透明区域
-        transparentRect = detectTransparentArea(selectedImage);
+        // Detect transparent area
+        state.transparentRect = detectTransparentArea(selectedImage);
 
-        // 设置画布尺寸和样式
+        // Set canvas size and style
         const container = document.querySelector('.canvas-container');
         const containerWidth = container.clientWidth - 40;
         const containerHeight = container.clientHeight - 40;
         const scale = calculateCanvasScale(selectedImage.width, selectedImage.height, containerWidth, containerHeight);
 
-        resultCanvas.width = selectedImage.width;
-        resultCanvas.height = selectedImage.height;
-        resultCanvas.style.width = `${selectedImage.width * scale}px`;
-        resultCanvas.style.height = `${selectedImage.height * scale}px`;
+        elements.resultCanvas.width = selectedImage.width;
+        elements.resultCanvas.height = selectedImage.height;
+        elements.resultCanvas.style.width = `${selectedImage.width * scale}px`;
+        elements.resultCanvas.style.height = `${selectedImage.height * scale}px`;
 
-        interactiveCanvas.width = selectedImage.width;
-        interactiveCanvas.height = selectedImage.height;
-        interactiveCanvas.style.width = `${selectedImage.width * scale}px`;
-        interactiveCanvas.style.height = `${selectedImage.height * scale}px`;
+        elements.interactiveCanvas.width = selectedImage.width;
+        elements.interactiveCanvas.height = selectedImage.height;
+        elements.interactiveCanvas.style.width = `${selectedImage.width * scale}px`;
+        elements.interactiveCanvas.style.height = `${selectedImage.height * scale}px`;
 
-        // 绘制结果
-        const resultImage = drawResult(selectedImage, transparentRect);
-        resultCanvas.getContext('2d').drawImage(resultImage, 0, 0);
+        // Draw result
+        const resultImage = drawResult(selectedImage, state.transparentRect);
+        elements.resultCanvas.getContext('2d').drawImage(resultImage, 0, 0);
 
-        // 显示确认按钮
-        confirmButton.style.display = 'block';
+        // Show confirm button
+        elements.confirmButton.style.display = 'block';
     });
 
-    // 添加确认按钮点击事件
-    confirmButton.addEventListener('click', () => {
-        if (!transparentRect) return;
+    // Confirm button click event
+    elements.confirmButton.addEventListener('click', () => {
+        if (!state.transparentRect) return;
 
-        // 获取输入参数
-        const productWidth = parseFloat(productWidthInput.value) || 1;
-        const productHeight = parseFloat(productHeightInput.value) || 1;
-        const aspectRatio = productWidthInput.value && productHeightInput.value
+        // Get input parameters
+        const productWidth = parseFloat(elements.productWidthInput.value) || 1;
+        const productHeight = parseFloat(elements.productHeightInput.value) || 1;
+        const aspectRatio = elements.productWidthInput.value && elements.productHeightInput.value
             ? productWidth / productHeight
-            : transparentRect.width / transparentRect.height;
+            : state.transparentRect.width / state.transparentRect.height;
 
         // print aspect ratio
-        console.log('aspectRatio', aspectRatio);
-        const bleed = parseFloat(bleedInput.value) || 0;
+        const bleed = parseFloat(elements.bleedInput.value) || 0;
         const bleedRatio = bleed / productWidth;
 
-        // 计算最终矩形
-        finalRect = calculateAspectRatioRect(transparentRect, aspectRatio, bleedRatio);
+        // Calculate final rectangle
+        state.finalRect = calculateAspectRatioRect(state.transparentRect, aspectRatio, bleedRatio);
 
-        // 更新显示信息
-        poInfo.textContent = `
-            "x": ${toFloat(finalRect.x / selectedImage.width, 4)}, 
-            "y": ${toFloat(finalRect.y / selectedImage.height, 4)}, 
-            "w": ${toFloat(finalRect.width / selectedImage.width, 4)}, 
-            "h": ${toFloat(finalRect.height / selectedImage.height, 4)}
+        // Update display information
+        const poInfoText = `
+            "x": ${toFloat(state.finalRect.x / selectedImage.width, 4)}, 
+            "y": ${toFloat(state.finalRect.y / selectedImage.height, 4)}, 
+            "w": ${toFloat(state.finalRect.width / selectedImage.width, 4)}, 
+            "h": ${toFloat(state.finalRect.height / selectedImage.height, 4)}
         `;
+        elements.poInfo.querySelector('.info-content').textContent = poInfoText;
 
-        templateInfo.textContent = `
+        const templateInfoText = `
             "width": ${selectedImage.width}, 
             "height": ${selectedImage.height}, 
-            "left": ${Math.round(finalRect.x)}, 
-            "top": ${Math.round(finalRect.y)}, 
-            "right": ${Math.round(finalRect.x + finalRect.width)}, 
-            "bottom": ${Math.round(finalRect.y + finalRect.height)}
+            "left": ${Math.round(state.finalRect.x)}, 
+            "top": ${Math.round(state.finalRect.y)}, 
+            "right": ${Math.round(state.finalRect.x + state.finalRect.width)}, 
+            "bottom": ${Math.round(state.finalRect.y + state.finalRect.height)}
         `;
+        elements.templateInfo.querySelector('.info-content').textContent = templateInfoText;
 
-        // 重新绘制结果，这次包括finalRect
-        const resultImage = drawResult(selectedImage, transparentRect, true);
-        resultCanvas.getContext('2d').drawImage(resultImage, 0, 0);
+        // Redraw result, this time including finalRect
+        const resultImage = drawResult(selectedImage, state.transparentRect, true);
+        elements.resultCanvas.getContext('2d').drawImage(resultImage, 0, 0);
         drawCorners();
 
-        calculateMarginsButton.style.display = 'block';
+        elements.calculateMarginsButton.style.display = 'block';
     });
 
-    // 添加计算边距按钮的点击事件
-    calculateMarginsButton.addEventListener('click', () => {
-        if (!corners || corners.length !== 4 || !finalRect) {
-            alert('请先分析图片！');
+    // Calculate margins button click event
+    elements.calculateMarginsButton.addEventListener('click', () => {
+        if (!state.corners || state.corners.length !== 4 || !state.finalRect) {
+            alert('Please detect the transparent area and confirm the rectangle first!');
             return;
         }
 
-        // 获取原始矩形的顶点
+        // Get original rectangle vertices
         const originalCorners = [
-            { x: finalRect.x, y: finalRect.y },
-            { x: finalRect.x + finalRect.width, y: finalRect.y },
-            { x: finalRect.x + finalRect.width, y: finalRect.y + finalRect.height },
-            { x: finalRect.x, y: finalRect.y + finalRect.height }
+            { x: state.finalRect.x, y: state.finalRect.y },
+            { x: state.finalRect.x + state.finalRect.width, y: state.finalRect.y },
+            { x: state.finalRect.x + state.finalRect.width, y: state.finalRect.y + state.finalRect.height },
+            { x: state.finalRect.x, y: state.finalRect.y + state.finalRect.height }
         ];
 
-        // 计算每个顶点的偏移量
-        const offsets = corners.map((corner, index) => {
+        // Calculate offset for each vertex
+        const offsets = state.corners.map((corner, index) => {
             const originalCorner = originalCorners[index];
             return {
                 x: Math.abs(corner.x - originalCorner.x) > 1 ? Math.round(corner.x - originalCorner.x) : 0,
@@ -529,28 +549,38 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         // all offsets item x and y is 0
-        if (!offsets.every(offset => offset.x == 0 && offset.y == 0)) {
-            if (!poInfo.textContent.includes("margins")) {
-                const width = selectedImage.width;
-                const height = selectedImage.height;
-                poInfo.textContent = poInfo.textContent.trimEnd() + `, "margins": [
-                    ${toFloat(offsets[0].x / width)}, ${toFloat(offsets[0].y / height)}, 
-                    ${toFloat(offsets[1].x / width)}, ${toFloat(offsets[1].y / height)}, 
-                    ${toFloat(offsets[2].x / width)}, ${toFloat(offsets[2].y / height)}, 
-                    ${toFloat(offsets[3].x / width)}, ${toFloat(offsets[3].y / height)}
-                ]
-                `;
-            }
+        if (offsets.every(offset => offset.x == 0 && offset.y == 0)) {
+            console.log('No offsets detected!');
+            return;
+        }
 
-            if (!templateInfo.textContent.includes('margins')) {
-                // 显示偏移量信息
-                templateInfo.textContent = templateInfo.textContent.trimEnd() + `, "margins": [
-                    ${offsets[0].x}, ${offsets[0].y}, 
-                    ${offsets[1].x}, ${offsets[1].y}, 
-                    ${offsets[2].x}, ${offsets[2].y}, 
-                    ${offsets[3].x}, ${offsets[3].y}]
-                `;
-            }
+        const width = selectedImage.width;
+        const height = selectedImage.height;
+        const marginInfo = `[
+            ${toFloat(offsets[0].x / width)}, ${toFloat(offsets[0].y / height)}, 
+            ${toFloat(offsets[1].x / width)}, ${toFloat(offsets[1].y / height)}, 
+            ${toFloat(offsets[2].x / width)}, ${toFloat(offsets[2].y / height)}, 
+            ${toFloat(offsets[3].x / width)}, ${toFloat(offsets[3].y / height)}
+        ]`;
+
+        const poInfoContent = elements.poInfo.querySelector('.info-content');
+        if (poInfoContent.textContent.includes("margins")) {
+            poInfoContent.textContent = poInfoContent.textContent.replace(/"margins":\s*\[[^\]]*\]/, `"margins": ${marginInfo}`);
+        } else {
+            poInfoContent.textContent = poInfoContent.textContent.trimEnd() + `, "margins": ${marginInfo}`;
+        }
+
+        const templateMarginInfo = `[
+            ${offsets[0].x}, ${offsets[0].y}, 
+            ${offsets[1].x}, ${offsets[1].y}, 
+            ${offsets[2].x}, ${offsets[2].y}, 
+            ${offsets[3].x}, ${offsets[3].y}
+        ]`;
+        const templateInfoContent = elements.templateInfo.querySelector('.info-content');
+        if (templateInfoContent.textContent.includes('margins')) {
+            templateInfoContent.textContent = templateInfoContent.textContent.replace(/"margins":\s*\[[^\]]*\]/, `"margins": ${templateMarginInfo}`);
+        } else {
+            templateInfoContent.textContent = templateInfoContent.textContent.trimEnd() + `, "margins": ${templateMarginInfo}`;
         }
     });
 });
