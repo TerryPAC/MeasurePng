@@ -30,30 +30,81 @@ const detectTransparentArea = (img) => {
 
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
+    const visited = new Array(canvas.width * canvas.height).fill(false);
+    const areas = [];
 
-    let minX = canvas.width;
-    let minY = canvas.height;
-    let maxX = 0;
-    let maxY = 0;
+    // Flood fill function to detect connected transparent areas
+    const floodFill = (startX, startY) => {
+        const area = {
+            minX: startX,
+            minY: startY,
+            maxX: startX,
+            maxY: startY,
+            pixels: 0
+        };
 
-    // Iterate through pixels to find transparent area boundaries
+        // Initialize the stack with the starting coordinates for the flood fill algorithm
+        const stack = [[startX, startY]];
+
+        while (stack.length > 0) {
+            const [x, y] = stack.pop();
+            const index = y * canvas.width + x;
+
+            if (x < 10 || x >= canvas.width - 10 ||
+                y < 10 || y >= canvas.height - 10 ||
+                visited[index]) {
+                continue;
+            }
+
+            const alpha = data[(y * canvas.width + x) * 4 + 3];
+            if (alpha >= 192) {
+                visited[index] = true;
+                continue;
+            }
+
+            visited[index] = true;
+            area.pixels++;
+            area.minX = Math.min(area.minX, x);
+            area.minY = Math.min(area.minY, y);
+            area.maxX = Math.max(area.maxX, x);
+            area.maxY = Math.max(area.maxY, y);
+
+            stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+        }
+
+        return area;
+    };
+
+    // Find all transparent areas
     for (let y = 10; y < canvas.height - 10; y++) {
         for (let x = 10; x < canvas.width - 10; x++) {
-            const alpha = data[(y * canvas.width + x) * 4 + 3];
-            if (alpha < 192) {
-                minX = Math.min(minX, x);
-                minY = Math.min(minY, y);
-                maxX = Math.max(maxX, x);
-                maxY = Math.max(maxY, y);
+            const index = y * canvas.width + x;
+            if (!visited[index]) {
+                const alpha = data[(y * canvas.width + x) * 4 + 3];
+                if (alpha < 192) {
+                    const area = floodFill(x, y);
+                    if (area.pixels > 0) {
+                        areas.push(area);
+                    }
+                }
             }
         }
     }
 
+    // Find the largest area
+    if (areas.length === 0) {
+        return null;
+    }
+
+    console.log(areas);
+
+    const largestArea = areas.reduce((max, current) => current.pixels > max.pixels ? current : max, areas[0]);
+
     return {
-        x: minX,
-        y: minY,
-        width: maxX - minX,
-        height: maxY - minY
+        x: largestArea.minX - 1,
+        y: largestArea.minY - 1,
+        width: largestArea.maxX - largestArea.minX + 2,
+        height: largestArea.maxY - largestArea.minY + 2
     };
 }
 
