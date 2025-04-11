@@ -131,7 +131,7 @@ const calculateAspectRatioRect = (transparentArea, aspectRatio, bleedRatio) => {
     const centerY = y + height / 2;
 
     const bleeding = newWidth * bleedRatio;
-    // prinable size
+    // printable size
     const finalWidth = newWidth + 2 * bleeding;
     const finalHeight = newHeight + 2 * bleeding;
 
@@ -229,6 +229,7 @@ const drawCorners = () => {
     }
     state.interactiveCtx.stroke();
 
+    // Draw central axis
     state.interactiveCtx.beginPath();
     state.interactiveCtx.moveTo((state.corners[0].x + state.corners[1].x) / 2, (state.corners[0].y + state.corners[1].y) / 2);
     state.interactiveCtx.lineTo((state.corners[2].x + state.corners[3].x) / 2, (state.corners[2].y + state.corners[3].y) / 2);
@@ -370,11 +371,23 @@ document.addEventListener('DOMContentLoaded', () => {
         templateInfo: document.getElementById('templateInfo'),
         calculateMarginsButton: document.getElementById('calculateMarginsButton'),
         resultCanvas: document.getElementById('resultCanvas'),
-        interactiveCanvas: document.getElementById('interactiveCanvas')
+        interactiveCanvas: document.getElementById('interactiveCanvas'),
+        transformControls: document.getElementById('transformControls'),
+        rotationControl: document.getElementById('rotationControl'),
+        scaleControl: document.getElementById('scaleControl'),
+        rotationValue: document.getElementById('rotationValue'),
+        scaleValue: document.getElementById('scaleValue')
     };
 
     state.interactiveCtx = elements.interactiveCanvas.getContext('2d');
     let selectedImage = null;
+
+    // Add transformation state
+    const transform = {
+        rotation: 0,
+        scale: 1,
+        originalRect: null
+    };
 
     // Reset application state
     const resetState = () => {
@@ -382,9 +395,17 @@ document.addEventListener('DOMContentLoaded', () => {
         state.finalRect = null;
         state.isTransparentAreaModified = false;
         elements.confirmButton.style.display = 'none';
+        elements.transformControls.style.display = 'none';
         elements.poInfo.querySelector('.info-content').textContent = '';
         elements.templateInfo.querySelector('.info-content').textContent = '';
         elements.calculateMarginsButton.style.display = 'none';
+        transform.rotation = 0;
+        transform.scale = 1;
+        transform.originalRect = null;
+        elements.rotationControl.value = 0;
+        elements.scaleControl.value = 100;
+        elements.rotationValue.textContent = '0°';
+        elements.scaleValue.textContent = '1.0';
     };
 
     // Listen for file selection
@@ -496,6 +517,68 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Add rotation and scale functions
+    const rotatePoint = (point, center, angle) => {
+        const rad = (angle * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        const dx = point.x - center.x;
+        const dy = point.y - center.y;
+        return {
+            x: center.x + (dx * cos - dy * sin),
+            y: center.y + (dx * sin + dy * cos)
+        };
+    };
+
+    const scalePoint = (point, center, scale) => {
+        return {
+            x: center.x + (point.x - center.x) * scale,
+            y: center.y + (point.y - center.y) * scale
+        };
+    };
+
+    const updateRect = () => {
+        if (!transform.originalRect || !state.finalRect) return;
+
+        const center = {
+            x: transform.originalRect.x + transform.originalRect.width / 2,
+            y: transform.originalRect.y + transform.originalRect.height / 2
+        };
+
+        // Get original corners
+        const originalCorners = [
+            { x: transform.originalRect.x, y: transform.originalRect.y },
+            { x: transform.originalRect.x + transform.originalRect.width, y: transform.originalRect.y },
+            { x: transform.originalRect.x + transform.originalRect.width, y: transform.originalRect.y + transform.originalRect.height },
+            { x: transform.originalRect.x, y: transform.originalRect.y + transform.originalRect.height }
+        ];
+
+        // Apply transformations
+        state.corners = originalCorners.map(corner => {
+            // First rotate
+            const rotated = rotatePoint(corner, center, transform.rotation);
+            // Then scale
+            return scalePoint(rotated, center, transform.scale);
+        });
+
+        console.log(originalCorners);
+        console.log(state.corners);
+        drawCorners();
+    };
+
+    // Add transformation control event listeners
+    elements.rotationControl.addEventListener('input', (e) => {
+        transform.rotation = parseFloat(e.target.value);
+        elements.rotationValue.textContent = `${transform.rotation}°`;
+        updateRect();
+    });
+
+    elements.scaleControl.addEventListener('input', (e) => {
+        transform.scale = parseFloat(e.target.value) / 100;
+        elements.scaleValue.textContent = transform.scale.toFixed(2);
+        updateRect();
+    });
+
     // Analyze button click
     elements.analyzeButton.addEventListener('click', () => {
         if (!selectedImage) {
@@ -541,12 +624,15 @@ document.addEventListener('DOMContentLoaded', () => {
             ? productWidth / productHeight
             : state.transparentRect.width / state.transparentRect.height;
 
-        // print aspect ratio
         const bleed = parseFloat(elements.bleedInput.value) || 0;
         const bleedRatio = bleed / productWidth;
 
         // Calculate final rectangle
         state.finalRect = calculateAspectRatioRect(state.transparentRect, aspectRatio, bleedRatio);
+        transform.originalRect = { ...state.finalRect };
+
+        // Show transform controls
+        elements.transformControls.style.display = 'block';
 
         // Update display information
         const poInfoText = `
@@ -599,15 +685,9 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         });
 
-        // all offsets item x and y is 0
-        if (offsets.every(offset => offset.x == 0 && offset.y == 0)) {
-            console.log('No offsets detected!');
-            return;
-        }
-
         const width = selectedImage.width;
         const height = selectedImage.height;
-        const marginInfo = `[
+        const marginInfo = offsets.every(offset => offset.x == 0 && offset.y == 0) ? null : `"margins": [
             ${toFloat(offsets[0].x / width)}, ${toFloat(offsets[0].y / height)}, 
             ${toFloat(offsets[1].x / width)}, ${toFloat(offsets[1].y / height)}, 
             ${toFloat(offsets[2].x / width)}, ${toFloat(offsets[2].y / height)}, 
@@ -616,22 +696,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const poInfoContent = elements.poInfo.querySelector('.info-content');
         if (poInfoContent.textContent.includes("margins")) {
-            poInfoContent.textContent = poInfoContent.textContent.replace(/"margins":\s*\[[^\]]*\]/, `"margins": ${marginInfo}`);
-        } else {
-            poInfoContent.textContent = poInfoContent.textContent.trimEnd() + `, "margins": ${marginInfo}`;
+            poInfoContent.textContent = marginInfo
+                ? poInfoContent.textContent.replace(/"margins":\s*\[[^\]]*\]/, marginInfo)
+                : poInfoContent.textContent.replace(/,\s*"margins":\s*\[[^\]]*\]/, '');
+        } else if (marginInfo) {
+            poInfoContent.textContent = poInfoContent.textContent.trimEnd() + `, ${marginInfo}`;
         }
 
-        const templateMarginInfo = `[
+        const templateMarginInfo = offsets.every(offset => offset.x == 0 && offset.y == 0) ? null : `"margins": [
             ${offsets[0].x}, ${offsets[0].y}, 
             ${offsets[1].x}, ${offsets[1].y}, 
             ${offsets[2].x}, ${offsets[2].y}, 
             ${offsets[3].x}, ${offsets[3].y}
         ]`;
         const templateInfoContent = elements.templateInfo.querySelector('.info-content');
-        if (templateInfoContent.textContent.includes('margins')) {
-            templateInfoContent.textContent = templateInfoContent.textContent.replace(/"margins":\s*\[[^\]]*\]/, `"margins": ${templateMarginInfo}`);
-        } else {
-            templateInfoContent.textContent = templateInfoContent.textContent.trimEnd() + `, "margins": ${templateMarginInfo}`;
+        if (templateInfoContent.textContent.includes("margins")) {
+            templateInfoContent.textContent = templateMarginInfo
+                ? templateInfoContent.textContent.replace(/"margins":\s*\[[^\]]*\]/, templateMarginInfo)
+                : templateInfoContent.textContent.replace(/,\s*"margins":\s*\[[^\]]*\]/, '');
+        } else if (templateMarginInfo) {
+            templateInfoContent.textContent = templateInfoContent.textContent.trimEnd() + `, ${templateMarginInfo}`;
         }
     });
 });
