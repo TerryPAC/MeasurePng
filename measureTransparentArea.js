@@ -394,11 +394,11 @@ document.addEventListener('DOMContentLoaded', () => {
         state.transparentRect = null;
         state.finalRect = null;
         state.isTransparentAreaModified = false;
-        elements.confirmButton.style.display = 'none';
+        elements.confirmButton.style.visibility = 'hidden';
         elements.transformControls.style.display = 'none';
         elements.poInfo.querySelector('.info-content').textContent = '';
         elements.templateInfo.querySelector('.info-content').textContent = '';
-        elements.calculateMarginsButton.style.display = 'none';
+        elements.calculateMarginsButton.style.visibility = 'hidden';
         transform.rotation = 0;
         transform.scale = 1;
         transform.originalRect = null;
@@ -610,7 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.resultCanvas.getContext('2d').drawImage(resultImage, 0, 0);
 
         // Show confirm button
-        elements.confirmButton.style.display = 'block';
+        elements.confirmButton.style.visibility = 'visible';
     });
 
     // Confirm button click event
@@ -658,7 +658,8 @@ document.addEventListener('DOMContentLoaded', () => {
         elements.resultCanvas.getContext('2d').drawImage(resultImage, 0, 0);
         drawCorners();
 
-        elements.calculateMarginsButton.style.display = 'block';
+        // Show calculate margins button
+        elements.calculateMarginsButton.style.visibility = 'visible';
     });
 
     // Calculate margins button click event
