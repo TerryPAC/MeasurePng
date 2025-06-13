@@ -1,319 +1,33 @@
-// Create image selector
-const createImageSelector = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/png, image/jpeg, image/webp';
-    return input;
-}
+// Constants
+const ALPHA_THRESHOLD = 192; // Alpha value threshold to determine transparency
+const IMAGE_BORDER_OFFSET = 10; // Px offset from image edges to start transparency detection
+const CORNER_DETECTION_RADIUS = 15; // Px radius to detect mouse hover over a corner
+const EDGE_DETECTION_TOLERANCE = 10; // Px distance to detect mouse hover over an edge
+const CHECKERBOARD_TILE_SIZE = 5; // Px size for the canvas background checkerboard tiles
+const CANVAS_SCALE_FACTOR = 1.28; // Scale factor to provide padding around the image
 
-// Image loading handler
-const loadImage = (file) => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const img = new Image();
-            img.onload = () => resolve(img);
-            img.onerror = reject;
-            img.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
-    });
-}
+// Utility functions
+const toFloat = (value, precision = 6) => parseFloat(value.toFixed(precision));
 
-// Detect transparent area
-const detectTransparentArea = (img) => {
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    ctx.drawImage(img, 0, 0);
-
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    const visited = new Array(canvas.width * canvas.height).fill(false);
-    const areas = [];
-
-    // Flood fill function to detect connected transparent areas
-    const floodFill = (startX, startY) => {
-        const area = {
-            minX: startX,
-            minY: startY,
-            maxX: startX,
-            maxY: startY,
-            pixels: 0
-        };
-
-        // Initialize the stack with the starting coordinates for the flood fill algorithm
-        const stack = [[startX, startY]];
-
-        while (stack.length > 0) {
-            const [x, y] = stack.pop();
-            const index = y * canvas.width + x;
-
-            if (x < 10 || x >= canvas.width - 10 ||
-                y < 10 || y >= canvas.height - 10 ||
-                visited[index]) {
-                continue;
-            }
-
-            const alpha = data[(y * canvas.width + x) * 4 + 3];
-            if (alpha >= 192) {
-                visited[index] = true;
-                continue;
-            }
-
-            visited[index] = true;
-            area.pixels++;
-            area.minX = Math.min(area.minX, x);
-            area.minY = Math.min(area.minY, y);
-            area.maxX = Math.max(area.maxX, x);
-            area.maxY = Math.max(area.maxY, y);
-
-            stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
-        }
-
-        return area;
-    };
-
-    // Find all transparent areas
-    for (let y = 10; y < canvas.height - 10; y++) {
-        for (let x = 10; x < canvas.width - 10; x++) {
-            const index = y * canvas.width + x;
-            if (!visited[index]) {
-                const alpha = data[(y * canvas.width + x) * 4 + 3];
-                if (alpha < 192) {
-                    const area = floodFill(x, y);
-                    if (area.pixels > 0) {
-                        areas.push(area);
-                    }
-                }
-            }
-        }
-    }
-
-    // Find the largest area
-    if (areas.length === 0) {
-        return { x: 20, y: 20, width: img.width - 40, height: img.height - 40 };
-    }
-
-    console.log(areas);
-
-    const largestArea = areas.reduce((max, current) => current.pixels > max.pixels ? current : max, areas[0]);
-
+const rotatePoint = (point, center, angle) => {
+    const rad = (angle * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const dx = point.x - center.x;
+    const dy = point.y - center.y;
     return {
-        x: largestArea.minX - 1,
-        y: largestArea.minY - 1,
-        width: largestArea.maxX - largestArea.minX + 2,
-        height: largestArea.maxY - largestArea.minY + 2
+        x: center.x + (dx * cos - dy * sin),
+        y: center.y + (dx * sin + dy * cos)
     };
-}
-
-// Calculate best rectangle based on aspect ratio
-const calculateAspectRatioRect = (transparentArea, aspectRatio, bleedRatio) => {
-    const { x, y, width, height } = transparentArea;
-
-    let newWidth, newHeight;
-    const currentRatio = width / height;
-
-    // Determine if current rectangle should prioritize width or height to match target aspect ratio
-    if (currentRatio > aspectRatio) {
-        // Too wide, need to heighten
-        newWidth = width;
-        newHeight = newWidth / aspectRatio;
-    } else {
-        // Too tall, need to widen
-        newHeight = height;
-        newWidth = newHeight * aspectRatio;
-    }
-
-    // Calculate new rectangle center point (keep aligned with original transparent area center)
-    const centerX = x + width / 2;
-    const centerY = y + height / 2;
-
-    const bleeding = newWidth * bleedRatio;
-    // printable size
-    const finalWidth = newWidth + 2 * bleeding;
-    const finalHeight = newHeight + 2 * bleeding;
-
-    // Calculate final rectangle top-left coordinates
-    const finalX = centerX - finalWidth / 2;
-    const finalY = centerY - finalHeight / 2;
-
-    return {
-        x: finalX,
-        y: finalY,
-        width: finalWidth,
-        height: finalHeight
-    };
-}
-
-// Add global variables at the beginning of the file
-const state = {
-    corners: [],
-    isDragging: false,
-    selectedCorner: null,
-    interactiveCtx: null,
-    finalRect: null,
-    transparentRect: null,
-    isTransparentAreaModified: false,
-    selectedEdge: null,
-    originalMousePos: null,
-    canvasOffset: { x: 0, y: 0 }
 };
 
-// Draw result
-const drawResult = (img, transparentArea, drawFinal = false) => {
-    const canvasWidth = img.width * CANVAS_SCALE_FACTOR;
-    const canvasHeight = img.height * CANVAS_SCALE_FACTOR;
-    const offsetX = (canvasWidth - img.width) / 2;
-    const offsetY = (canvasHeight - img.height) / 2;
+const scalePoint = (point, center, scale) => {
+    return {
+        x: center.x + (point.x - center.x) * scale,
+        y: center.y + (point.y - center.y) * scale
+    };
+};
 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-
-    // Draw checkerboard background
-    const tileSize = 5; // Checkerboard tile size
-    for (let y = 0; y < canvas.height; y += tileSize) {
-        for (let x = 0; x < canvas.width; x += tileSize) {
-            ctx.fillStyle = (x + y) % (tileSize * 2) === 0 ? '#ffffff' : '#e0e0e0';
-            ctx.fillRect(x, y, tileSize, tileSize);
-        }
-    }
-
-    // Draw original image
-    ctx.drawImage(img, offsetX, offsetY);
-
-    // Draw transparent area rectangle (green)
-    ctx.strokeStyle = 'green';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(
-        transparentArea.x + offsetX,
-        transparentArea.y + offsetY,
-        transparentArea.width,
-        transparentArea.height
-    );
-
-    // Only draw the final red rectangle when drawFinal is true
-    if (drawFinal && state.finalRect) {
-        ctx.strokeStyle = 'red';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(
-            state.finalRect.x + offsetX,
-            state.finalRect.y + offsetY,
-            state.finalRect.width,
-            state.finalRect.height
-        );
-
-        // Initialize four corner coordinates
-        state.corners = [
-            { x: state.finalRect.x, y: state.finalRect.y },
-            { x: state.finalRect.x + state.finalRect.width, y: state.finalRect.y },
-            { x: state.finalRect.x + state.finalRect.width, y: state.finalRect.y + state.finalRect.height },
-            { x: state.finalRect.x, y: state.finalRect.y + state.finalRect.height }
-        ];
-    }
-
-    return canvas;
-}
-
-// Add new function after drawResult function
-const drawCorners = () => {
-    if (!state.interactiveCtx || state.corners.length !== 4) return;
-
-    const offsetX = state.canvasOffset.x;
-    const offsetY = state.canvasOffset.y;
-
-    state.interactiveCtx.clearRect(0, 0, state.interactiveCtx.canvas.width, state.interactiveCtx.canvas.height);
-
-    state.interactiveCtx.strokeStyle = '#FF00FF';
-    state.interactiveCtx.lineWidth = 2;
-
-    // Draw connecting lines
-    state.interactiveCtx.beginPath();
-    state.interactiveCtx.moveTo(state.corners[0].x + offsetX, state.corners[0].y + offsetY);
-    for (let i = 1; i <= 4; i++) {
-        state.interactiveCtx.lineTo(state.corners[i % 4].x + offsetX, state.corners[i % 4].y + offsetY);
-    }
-    state.interactiveCtx.stroke();
-
-    // Draw central axis
-    state.interactiveCtx.beginPath();
-    state.interactiveCtx.moveTo((state.corners[0].x + state.corners[1].x) / 2 + offsetX, (state.corners[0].y + state.corners[1].y) / 2 + offsetY);
-    state.interactiveCtx.lineTo((state.corners[2].x + state.corners[3].x) / 2 + offsetX, (state.corners[2].y + state.corners[3].y) / 2 + offsetY);
-    state.interactiveCtx.stroke();
-
-    state.interactiveCtx.beginPath();
-    state.interactiveCtx.moveTo((state.corners[3].x + state.corners[0].x) / 2 + offsetX, (state.corners[3].y + state.corners[0].y) / 2 + offsetY);
-    state.interactiveCtx.lineTo((state.corners[1].x + state.corners[2].x) / 2 + offsetX, (state.corners[1].y + state.corners[2].y) / 2 + offsetY);
-    state.interactiveCtx.stroke();
-
-    // Draw vertices
-    state.corners.forEach((corner, index) => {
-        state.interactiveCtx.beginPath();
-        state.interactiveCtx.arc(corner.x + offsetX, corner.y + offsetY, 8, 0, Math.PI * 2);
-        state.interactiveCtx.fillStyle = '#00FF00';
-        state.interactiveCtx.fill();
-        state.interactiveCtx.strokeStyle = '#000000';
-        state.interactiveCtx.lineWidth = 2;
-        state.interactiveCtx.stroke();
-    });
-}
-
-// Add new function to calculate canvas scaling
-const calculateCanvasScale = (imageWidth, imageHeight, containerWidth, containerHeight) => {
-    const scaleX = containerWidth / imageWidth;
-    const scaleY = containerHeight / imageHeight;
-    return Math.min(scaleX, scaleY, 1); // Do not exceed original size
-}
-
-// Add function to check if mouse is on edge
-const findClosestEdge = (mousePos) => {
-    if (!state.transparentRect) return null;
-
-    const tolerance = 10; // Detection range
-    const edges = [
-        { // Top edge
-            line: {
-                x1: state.transparentRect.x, y1: state.transparentRect.y,
-                x2: state.transparentRect.x + state.transparentRect.width, y2: state.transparentRect.y
-            },
-            type: 'top'
-        },
-        { // Right edge
-            line: {
-                x1: state.transparentRect.x + state.transparentRect.width, y1: state.transparentRect.y,
-                x2: state.transparentRect.x + state.transparentRect.width, y2: state.transparentRect.y + state.transparentRect.height
-            },
-            type: 'right'
-        },
-        { // Bottom edge
-            line: {
-                x1: state.transparentRect.x, y1: state.transparentRect.y + state.transparentRect.height,
-                x2: state.transparentRect.x + state.transparentRect.width, y2: state.transparentRect.y + state.transparentRect.height
-            },
-            type: 'bottom'
-        },
-        { // Left edge
-            line: {
-                x1: state.transparentRect.x, y1: state.transparentRect.y,
-                x2: state.transparentRect.x, y2: state.transparentRect.y + state.transparentRect.height
-            },
-            type: 'left'
-        }
-    ];
-
-    for (const edge of edges) {
-        const dist = pointToLineDistance(mousePos, edge.line);
-        if (dist < tolerance) {
-            return edge.type;
-        }
-    }
-    return null;
-}
-
-// Add function to calculate point to line distance
 const pointToLineDistance = (point, line) => {
     const A = point.x - line.x1;
     const B = point.y - line.y1;
@@ -343,402 +57,604 @@ const pointToLineDistance = (point, line) => {
     return Math.sqrt(dx * dx + dy * dy);
 }
 
-// Utility functions
-const toFloat = (value, precision = 6) => parseFloat(value.toFixed(precision));
+class ImageProcessorApp {
+    constructor() {
+        this.elements = {
+            imageInput: document.getElementById('imageInput'),
+            productWidthInput: document.getElementById('productWidth'),
+            productHeightInput: document.getElementById('productHeight'),
+            bleedInput: document.getElementById('bleed'),
+            analyzeButton: document.getElementById('analyzeButton'),
+            confirmButton: document.getElementById('confirmButton'),
+            poInfo: document.getElementById('poInfo'),
+            templateInfo: document.getElementById('templateInfo'),
+            calculateMarginsButton: document.getElementById('calculateMarginsButton'),
+            resultCanvas: document.getElementById('resultCanvas'),
+            interactiveCanvas: document.getElementById('interactiveCanvas'),
+            transformControls: document.getElementById('transformControls'),
+            rotationControl: document.getElementById('rotationControl'),
+            scaleControl: document.getElementById('scaleControl'),
+            rotationValue: document.getElementById('rotationValue'),
+            scaleValue: document.getElementById('scaleValue')
+        };
+        this.interactiveCtx = this.elements.interactiveCanvas.getContext('2d');
+        this.selectedImage = null;
 
-const CANVAS_SCALE_FACTOR = 1.28;
+        this.state = {
+            corners: [],
+            isDragging: false,
+            selectedCorner: null,
+            finalRect: null,
+            transparentRect: null,
+            isTransparentAreaModified: false,
+            selectedEdge: null,
+            originalMousePos: null,
+            canvasOffset: { x: 0, y: 0 }
+        };
 
-const getMousePos = (canvas, evt) => {
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const canvasX = (evt.clientX - rect.left) * scaleX;
-    const canvasY = (evt.clientY - rect.top) * scaleY;
-    return {
-        canvas: { x: canvasX, y: canvasY },
-        image: {
-            x: canvasX - state.canvasOffset.x,
-            y: canvasY - state.canvasOffset.y
+        this.transform = {
+            rotation: 0,
+            scale: 1,
+            originalRect: null
+        };
+    }
+
+    init() {
+        this._addEventListeners();
+    }
+
+    _addEventListeners() {
+        this.elements.imageInput.addEventListener('change', (e) => this._handleImageSelection(e));
+
+        this.elements.interactiveCanvas.addEventListener('mousedown', (e) => this._handleMouseDown(e));
+        this.elements.interactiveCanvas.addEventListener('mousemove', (e) => this._handleMouseMove(e));
+        this.elements.interactiveCanvas.addEventListener('mouseup', () => this._resetMouseState());
+        this.elements.interactiveCanvas.addEventListener('mouseleave', () => this._resetMouseState());
+
+        this.elements.analyzeButton.addEventListener('click', () => this._analyzeImage());
+        this.elements.confirmButton.addEventListener('click', () => this._confirmSelection());
+        this.elements.calculateMarginsButton.addEventListener('click', () => this._calculateAndDisplayMargins());
+
+        this.elements.rotationControl.addEventListener('input', (e) => {
+            this.transform.rotation = parseFloat(e.target.value);
+            this.elements.rotationValue.textContent = `${this.transform.rotation}°`;
+            this._updateRectWithTransforms();
+        });
+
+        this.elements.scaleControl.addEventListener('input', (e) => {
+            this.transform.scale = parseFloat(e.target.value) / 100;
+            this.elements.scaleValue.textContent = this.transform.scale.toFixed(2);
+            this._updateRectWithTransforms();
+        });
+
+        document.querySelectorAll('.copy-button').forEach(button => {
+            button.addEventListener('click', async () => {
+                const targetId = button.getAttribute('data-target');
+                const targetElement = document.getElementById(targetId);
+                const textToCopy = targetElement.querySelector('.info-content').textContent.trim();
+
+                try {
+                    await navigator.clipboard.writeText(textToCopy);
+                    const originalColor = button.style.color;
+                    button.style.color = '#4CAF50';
+                    setTimeout(() => { button.style.color = originalColor; }, 1000);
+                } catch (err) {
+                    console.error('Copy failed!', err);
+                    alert('Copy failed!');
+                }
+            });
+        });
+    }
+
+    _resetAppState() {
+        this.state.transparentRect = null;
+        this.state.finalRect = null;
+        this.state.isTransparentAreaModified = false;
+        this.state.corners = [];
+        this.elements.confirmButton.style.visibility = 'hidden';
+        this.elements.transformControls.style.display = 'none';
+        this.elements.poInfo.querySelector('.info-content').textContent = '';
+        this.elements.templateInfo.querySelector('.info-content').textContent = '';
+        this.elements.calculateMarginsButton.style.visibility = 'hidden';
+
+        this.transform.rotation = 0;
+        this.transform.scale = 1;
+        this.transform.originalRect = null;
+
+        this.elements.rotationControl.value = 0;
+        this.elements.scaleControl.value = 100;
+        this.elements.rotationValue.textContent = '0°';
+        this.elements.scaleValue.textContent = '1.0';
+
+        if (this.interactiveCtx) {
+            this.interactiveCtx.clearRect(0, 0, this.elements.interactiveCanvas.width, this.elements.interactiveCanvas.height);
         }
-    };
-}
+        const resultCtx = this.elements.resultCanvas.getContext('2d');
+        if (resultCtx) {
+            resultCtx.clearRect(0, 0, this.elements.resultCanvas.width, this.elements.resultCanvas.height);
+        }
+    }
 
-const findClosestCorner = (mousePos) => {
-    return state.corners.find(corner => {
-        const distance = Math.sqrt(
-            Math.pow(corner.x - mousePos.x, 2) +
-            Math.pow(corner.y - mousePos.y, 2)
-        );
-        return distance < 15; // Increase detection range
-    });
-}
-
-// Initialize event listeners
-document.addEventListener('DOMContentLoaded', () => {
-    // DOM elements
-    const elements = {
-        imageInput: document.getElementById('imageInput'),
-        productWidthInput: document.getElementById('productWidth'),
-        productHeightInput: document.getElementById('productHeight'),
-        bleedInput: document.getElementById('bleed'),
-        analyzeButton: document.getElementById('analyzeButton'),
-        confirmButton: document.getElementById('confirmButton'),
-        poInfo: document.getElementById('poInfo'),
-        templateInfo: document.getElementById('templateInfo'),
-        calculateMarginsButton: document.getElementById('calculateMarginsButton'),
-        resultCanvas: document.getElementById('resultCanvas'),
-        interactiveCanvas: document.getElementById('interactiveCanvas'),
-        transformControls: document.getElementById('transformControls'),
-        rotationControl: document.getElementById('rotationControl'),
-        scaleControl: document.getElementById('scaleControl'),
-        rotationValue: document.getElementById('rotationValue'),
-        scaleValue: document.getElementById('scaleValue')
-    };
-
-    state.interactiveCtx = elements.interactiveCanvas.getContext('2d');
-    let selectedImage = null;
-
-    // Add transformation state
-    const transform = {
-        rotation: 0,
-        scale: 1,
-        originalRect: null
-    };
-
-    // Reset application state
-    const resetState = () => {
-        state.transparentRect = null;
-        state.finalRect = null;
-        state.isTransparentAreaModified = false;
-        elements.confirmButton.style.visibility = 'hidden';
-        elements.transformControls.style.display = 'none';
-        elements.poInfo.querySelector('.info-content').textContent = '';
-        elements.templateInfo.querySelector('.info-content').textContent = '';
-        elements.calculateMarginsButton.style.visibility = 'hidden';
-        transform.rotation = 0;
-        transform.scale = 1;
-        transform.originalRect = null;
-        elements.rotationControl.value = 0;
-        elements.scaleControl.value = 100;
-        elements.rotationValue.textContent = '0°';
-        elements.scaleValue.textContent = '1.0';
-    };
-
-    // Listen for file selection
-    elements.imageInput.addEventListener('change', async (e) => {
+    async _handleImageSelection(e) {
         const file = e.target.files[0];
         if (file) {
-            selectedImage = await loadImage(file);
-            resetState();
-        }
-    });
-
-    // Mouse event handlers
-    const handleMouseDown = (e) => {
-        const mousePos = getMousePos(elements.interactiveCanvas, e).image;
-        if (state.finalRect) {
-            state.selectedCorner = findClosestCorner(mousePos);
-            if (state.selectedCorner) {
-                state.isDragging = true;
-            }
-        } else if (state.transparentRect) {
-            state.selectedEdge = findClosestEdge(mousePos);
-            if (state.selectedEdge) {
-                state.isDragging = true;
-                state.originalMousePos = mousePos;
-                state.isTransparentAreaModified = true;
-            }
-        }
-    };
-
-    const handleMouseMove = (e) => {
-        const mousePos = getMousePos(elements.interactiveCanvas, e).image;
-
-        if (state.finalRect) {
-            const hoveredCorner = findClosestCorner(mousePos);
-            elements.interactiveCanvas.style.cursor = hoveredCorner ? 'pointer' : 'default';
-
-            if (state.isDragging && state.selectedCorner) {
-                state.selectedCorner.x = mousePos.x;
-                state.selectedCorner.y = mousePos.y;
-                drawCorners();
-            }
-        } else if (state.transparentRect) {
-            const hoveredEdge = findClosestEdge(mousePos);
-            elements.interactiveCanvas.style.cursor = hoveredEdge ? 'move' : 'default';
-
-            if (state.isDragging && state.selectedEdge && state.originalMousePos) {
-                const dx = mousePos.x - state.originalMousePos.x;
-                const dy = mousePos.y - state.originalMousePos.y;
-
-                switch (state.selectedEdge) {
-                    case 'left':
-                        state.transparentRect.width -= dx;
-                        state.transparentRect.x += dx;
-                        break;
-                    case 'right':
-                        state.transparentRect.width = mousePos.x - state.transparentRect.x;
-                        break;
-                    case 'top':
-                        state.transparentRect.height -= dy;
-                        state.transparentRect.y += dy;
-                        break;
-                    case 'bottom':
-                        state.transparentRect.height = mousePos.y - state.transparentRect.y;
-                        break;
-                }
-
-                state.originalMousePos = mousePos;
-
-                // Clear result canvas before redrawing
-                elements.resultCanvas.getContext('2d').clearRect(0, 0, elements.resultCanvas.width, elements.resultCanvas.height);
-
-                // Redraw result with updated transparent area
-                const resultImage = drawResult(selectedImage, state.transparentRect, false);
-                elements.resultCanvas.getContext('2d').drawImage(resultImage, 0, 0);
-
-                // Clear interactive canvas, as it's only for corners
-                state.interactiveCtx.clearRect(0, 0, elements.interactiveCanvas.width, elements.interactiveCanvas.height);
-            }
-        }
-    };
-
-    const resetMouseState = () => {
-        state.isDragging = false;
-        state.selectedCorner = null;
-        state.selectedEdge = null;
-        state.originalMousePos = null;
-    };
-
-    elements.interactiveCanvas.addEventListener('mousedown', handleMouseDown);
-    elements.interactiveCanvas.addEventListener('mousemove', handleMouseMove);
-    elements.interactiveCanvas.addEventListener('mouseup', resetMouseState);
-    elements.interactiveCanvas.addEventListener('mouseleave', resetMouseState);
-
-    // Copy button functionality
-    document.querySelectorAll('.copy-button').forEach(button => {
-        button.addEventListener('click', async () => {
-            const targetId = button.getAttribute('data-target');
-            const targetElement = document.getElementById(targetId);
-            const textToCopy = targetElement.querySelector('.info-content').textContent.trim();
-
             try {
-                await navigator.clipboard.writeText(textToCopy);
-                // Show copy success visual feedback
-                const originalColor = button.style.color;
-                button.style.color = '#4CAF50';
-                setTimeout(() => { button.style.color = originalColor; }, 1000);
-            } catch (err) {
-                alert('Copy failed!');
+                this.selectedImage = await this._loadImage(file);
+                this._resetAppState();
+            } catch (error) {
+                console.error("Image loading failed:", error);
+                alert("Failed to load image.");
             }
+        }
+    }
+
+    _loadImage(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = reject;
+                img.src = e.target.result;
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
         });
-    });
+    }
 
-    // Add rotation and scale functions
-    const rotatePoint = (point, center, angle) => {
-        const rad = (angle * Math.PI) / 180;
-        const cos = Math.cos(rad);
-        const sin = Math.sin(rad);
-        const dx = point.x - center.x;
-        const dy = point.y - center.y;
-        return {
-            x: center.x + (dx * cos - dy * sin),
-            y: center.y + (dx * sin + dy * cos)
-        };
-    };
-
-    const scalePoint = (point, center, scale) => {
-        return {
-            x: center.x + (point.x - center.x) * scale,
-            y: center.y + (point.y - center.y) * scale
-        };
-    };
-
-    const updateRect = () => {
-        if (!transform.originalRect || !state.finalRect) return;
-
-        const center = {
-            x: transform.originalRect.x + transform.originalRect.width / 2,
-            y: transform.originalRect.y + transform.originalRect.height / 2
-        };
-
-        // Get original corners
-        const originalCorners = [
-            { x: transform.originalRect.x, y: transform.originalRect.y },
-            { x: transform.originalRect.x + transform.originalRect.width, y: transform.originalRect.y },
-            { x: transform.originalRect.x + transform.originalRect.width, y: transform.originalRect.y + transform.originalRect.height },
-            { x: transform.originalRect.x, y: transform.originalRect.y + transform.originalRect.height }
-        ];
-
-        // Apply transformations
-        state.corners = originalCorners.map(corner => {
-            // First rotate
-            const rotated = rotatePoint(corner, center, transform.rotation);
-            // Then scale
-            return scalePoint(rotated, center, transform.scale);
-        });
-
-        console.log(originalCorners);
-        console.log(state.corners);
-        drawCorners();
-    };
-
-    // Add transformation control event listeners
-    elements.rotationControl.addEventListener('input', (e) => {
-        transform.rotation = parseFloat(e.target.value);
-        elements.rotationValue.textContent = `${transform.rotation}°`;
-        updateRect();
-    });
-
-    elements.scaleControl.addEventListener('input', (e) => {
-        transform.scale = parseFloat(e.target.value) / 100;
-        elements.scaleValue.textContent = transform.scale.toFixed(2);
-        updateRect();
-    });
-
-    // Analyze button click
-    elements.analyzeButton.addEventListener('click', () => {
-        if (!selectedImage) {
-            alert('Please choose a png first!');
+    _analyzeImage() {
+        if (!this.selectedImage) {
+            alert('Please choose an image first!');
             return;
         }
 
-        // Detect transparent area
-        state.transparentRect = detectTransparentArea(selectedImage);
+        this.state.transparentRect = this._detectTransparentArea(this.selectedImage);
+        this._setupCanvases();
+        this._drawResult();
+        this.elements.confirmButton.style.visibility = 'visible';
+    }
 
-        // Set canvas size and style
-        const canvasWidth = selectedImage.width * CANVAS_SCALE_FACTOR;
-        const canvasHeight = selectedImage.height * CANVAS_SCALE_FACTOR;
-        state.canvasOffset.x = (canvasWidth - selectedImage.width) / 2;
-        state.canvasOffset.y = (canvasHeight - selectedImage.height) / 2;
+    _setupCanvases() {
+        const img = this.selectedImage;
+        const canvasWidth = img.width * CANVAS_SCALE_FACTOR;
+        const canvasHeight = img.height * CANVAS_SCALE_FACTOR;
+        this.state.canvasOffset.x = (canvasWidth - img.width) / 2;
+        this.state.canvasOffset.y = (canvasHeight - img.height) / 2;
 
         const container = document.querySelector('.canvas-container');
-        const containerWidth = container.clientWidth;
-        const containerHeight = container.clientHeight;
-        const scale = calculateCanvasScale(canvasWidth, canvasHeight, containerWidth, containerHeight);
+        const scale = this._calculateCanvasScale(canvasWidth, canvasHeight, container.clientWidth, container.clientHeight);
 
-        elements.resultCanvas.width = canvasWidth;
-        elements.resultCanvas.height = canvasHeight;
-        elements.resultCanvas.style.width = `${canvasWidth * scale}px`;
-        elements.resultCanvas.style.height = `${canvasHeight * scale}px`;
+        [this.elements.resultCanvas, this.elements.interactiveCanvas].forEach(canvas => {
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            canvas.style.width = `${canvasWidth * scale}px`;
+            canvas.style.height = `${canvasHeight * scale}px`;
+        });
+    }
+    
+    _calculateCanvasScale(imageWidth, imageHeight, containerWidth, containerHeight) {
+        const scaleX = containerWidth / imageWidth;
+        const scaleY = containerHeight / imageHeight;
+        return Math.min(scaleX, scaleY, 1);
+    }
 
-        elements.interactiveCanvas.width = canvasWidth;
-        elements.interactiveCanvas.height = canvasHeight;
-        elements.interactiveCanvas.style.width = `${canvasWidth * scale}px`;
-        elements.interactiveCanvas.style.height = `${canvasHeight * scale}px`;
+    _detectTransparentArea(img) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
 
-        // Draw result
-        const resultImage = drawResult(selectedImage, state.transparentRect);
-        elements.resultCanvas.getContext('2d').drawImage(resultImage, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        const visited = new Array(canvas.width * canvas.height).fill(false);
+        const areas = [];
+        
+        const floodFill = (startX, startY) => {
+            const area = { minX: startX, minY: startY, maxX: startX, maxY: startY, pixels: 0 };
+            const stack = [[startX, startY]];
 
-        // Show confirm button
-        elements.confirmButton.style.visibility = 'visible';
-    });
+            while (stack.length > 0) {
+                const [x, y] = stack.pop();
+                const index = y * canvas.width + x;
 
-    // Confirm button click event
-    elements.confirmButton.addEventListener('click', () => {
-        if (!state.transparentRect) return;
+                if (x < IMAGE_BORDER_OFFSET || x >= canvas.width - IMAGE_BORDER_OFFSET ||
+                    y < IMAGE_BORDER_OFFSET || y >= canvas.height - IMAGE_BORDER_OFFSET ||
+                    visited[index]) {
+                    continue;
+                }
 
-        // Get input parameters
-        const productWidth = parseFloat(elements.productWidthInput.value) || 1;
-        const productHeight = parseFloat(elements.productHeightInput.value) || 1;
-        const aspectRatio = elements.productWidthInput.value && elements.productHeightInput.value
+                if (data[(y * canvas.width + x) * 4 + 3] >= ALPHA_THRESHOLD) {
+                    visited[index] = true;
+                    continue;
+                }
+
+                visited[index] = true;
+                area.pixels++;
+                area.minX = Math.min(area.minX, x);
+                area.minY = Math.min(area.minY, y);
+                area.maxX = Math.max(area.maxX, x);
+                area.maxY = Math.max(area.maxY, y);
+
+                stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+            }
+            return area;
+        };
+
+        for (let y = IMAGE_BORDER_OFFSET; y < canvas.height - IMAGE_BORDER_OFFSET; y++) {
+            for (let x = IMAGE_BORDER_OFFSET; x < canvas.width - IMAGE_BORDER_OFFSET; x++) {
+                const index = y * canvas.width + x;
+                if (!visited[index] && data[index * 4 + 3] < ALPHA_THRESHOLD) {
+                    const area = floodFill(x, y);
+                    if (area.pixels > 0) {
+                        areas.push(area);
+                    }
+                }
+            }
+        }
+
+        if (areas.length === 0) {
+            const fallbackMargin = IMAGE_BORDER_OFFSET * 2;
+            return { x: fallbackMargin, y: fallbackMargin, width: img.width - fallbackMargin*2, height: img.height - fallbackMargin*2 };
+        }
+
+        const largestArea = areas.reduce((max, current) => current.pixels > max.pixels ? current : max);
+
+        return {
+            x: largestArea.minX - 1,
+            y: largestArea.minY - 1,
+            width: largestArea.maxX - largestArea.minX + 2,
+            height: largestArea.maxY - largestArea.minY + 2
+        };
+    }
+
+    _confirmSelection() {
+        if (!this.state.transparentRect) return;
+
+        const productWidth = parseFloat(this.elements.productWidthInput.value) || 1;
+        const productHeight = parseFloat(this.elements.productHeightInput.value) || 1;
+        const aspectRatio = this.elements.productWidthInput.value && this.elements.productHeightInput.value
             ? productWidth / productHeight
-            : state.transparentRect.width / state.transparentRect.height;
+            : this.state.transparentRect.width / this.state.transparentRect.height;
 
-        const bleed = parseFloat(elements.bleedInput.value) || 0;
+        const bleed = parseFloat(this.elements.bleedInput.value) || 0;
         const bleedRatio = bleed / productWidth;
 
-        // Calculate final rectangle
-        state.finalRect = calculateAspectRatioRect(state.transparentRect, aspectRatio, bleedRatio);
-        transform.originalRect = { ...state.finalRect };
+        this.state.finalRect = this._calculateAspectRatioRect(this.state.transparentRect, aspectRatio, bleedRatio);
+        this.transform.originalRect = { ...this.state.finalRect };
 
-        // Show transform controls
-        elements.transformControls.style.display = 'block';
+        this._updateInfoPanels();
+        this._drawResult(true);
+        this._drawCorners();
 
-        // Update display information
+        this.elements.transformControls.style.display = 'block';
+        this.elements.calculateMarginsButton.style.visibility = 'visible';
+    }
+
+    _calculateAspectRatioRect(transparentArea, aspectRatio, bleedRatio) {
+        const { x, y, width, height } = transparentArea;
+        let newWidth, newHeight;
+        if (width / height > aspectRatio) {
+            newWidth = width;
+            newHeight = newWidth / aspectRatio;
+        } else {
+            newHeight = height;
+            newWidth = newHeight * aspectRatio;
+        }
+
+        const centerX = x + width / 2;
+        const centerY = y + height / 2;
+        const bleeding = newWidth * bleedRatio;
+        const finalWidth = newWidth + 2 * bleeding;
+        const finalHeight = newHeight + 2 * bleeding;
+
+        return {
+            x: centerX - finalWidth / 2,
+            y: centerY - finalHeight / 2,
+            width: finalWidth,
+            height: finalHeight
+        };
+    }
+
+    _drawResult(drawFinal = false) {
+        const img = this.selectedImage;
+        const transparentArea = this.state.transparentRect;
+        const canvas = this.elements.resultCanvas;
+        const ctx = canvas.getContext('2d');
+        const offsetX = this.state.canvasOffset.x;
+        const offsetY = this.state.canvasOffset.y;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw checkerboard background
+        for (let y = 0; y < canvas.height; y += CHECKERBOARD_TILE_SIZE) {
+            for (let x = 0; x < canvas.width; x += CHECKERBOARD_TILE_SIZE) {
+                ctx.fillStyle = ((x / CHECKERBOARD_TILE_SIZE) + (y / CHECKERBOARD_TILE_SIZE)) % 2 === 0 ? '#ffffff' : '#e0e0e0';
+                ctx.fillRect(x, y, CHECKERBOARD_TILE_SIZE, CHECKERBOARD_TILE_SIZE);
+            }
+        }
+
+        // Draw original image
+        ctx.drawImage(img, offsetX, offsetY);
+
+        // Draw transparent area rectangle (green)
+        ctx.strokeStyle = 'green';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(transparentArea.x + offsetX, transparentArea.y + offsetY, transparentArea.width, transparentArea.height);
+
+        // Draw final red rectangle
+        if (drawFinal && this.state.finalRect) {
+            ctx.strokeStyle = 'red';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(this.state.finalRect.x + offsetX, this.state.finalRect.y + offsetY, this.state.finalRect.width, this.state.finalRect.height);
+        }
+    }
+    
+    _drawCorners() {
+        if (this.state.corners.length !== 4) return;
+
+        const ctx = this.interactiveCtx;
+        const offsetX = this.state.canvasOffset.x;
+        const offsetY = this.state.canvasOffset.y;
+        
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.strokeStyle = '#FF00FF';
+        ctx.lineWidth = 2;
+
+        // Draw connecting lines
+        ctx.beginPath();
+        ctx.moveTo(this.state.corners[0].x + offsetX, this.state.corners[0].y + offsetY);
+        for (let i = 1; i <= 4; i++) {
+            ctx.lineTo(this.state.corners[i % 4].x + offsetX, this.state.corners[i % 4].y + offsetY);
+        }
+        ctx.stroke();
+
+        // Draw central axes
+        ctx.beginPath();
+        ctx.moveTo((this.state.corners[0].x + this.state.corners[1].x) / 2 + offsetX, (this.state.corners[0].y + this.state.corners[1].y) / 2 + offsetY);
+        ctx.lineTo((this.state.corners[2].x + this.state.corners[3].x) / 2 + offsetX, (this.state.corners[2].y + this.state.corners[3].y) / 2 + offsetY);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo((this.state.corners[3].x + this.state.corners[0].x) / 2 + offsetX, (this.state.corners[3].y + this.state.corners[0].y) / 2 + offsetY);
+        ctx.lineTo((this.state.corners[1].x + this.state.corners[2].x) / 2 + offsetX, (this.state.corners[1].y + this.state.corners[2].y) / 2 + offsetY);
+        ctx.stroke();
+
+        // Draw vertices
+        this.state.corners.forEach(corner => {
+            ctx.beginPath();
+            ctx.arc(corner.x + offsetX, corner.y + offsetY, 8, 0, Math.PI * 2);
+            ctx.fillStyle = '#00FF00';
+            ctx.fill();
+            ctx.strokeStyle = '#000000';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        });
+    }
+
+    _getMousePos(evt) {
+        const canvas = this.elements.interactiveCanvas;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const canvasX = (evt.clientX - rect.left) * scaleX;
+        const canvasY = (evt.clientY - rect.top) * scaleY;
+        return {
+            canvas: { x: canvasX, y: canvasY },
+            image: {
+                x: canvasX - this.state.canvasOffset.x,
+                y: canvasY - this.state.canvasOffset.y
+            }
+        };
+    }
+
+    _findClosestCorner(mousePos) {
+        return this.state.corners.find(corner => {
+            const distance = Math.hypot(corner.x - mousePos.x, corner.y - mousePos.y);
+            return distance < CORNER_DETECTION_RADIUS;
+        });
+    }
+    
+    _findClosestEdge(mousePos) {
+        if (!this.state.transparentRect) return null;
+        const { x, y, width, height } = this.state.transparentRect;
+        const edges = [
+            { type: 'top',    line: { x1: x, y1: y, x2: x + width, y2: y } },
+            { type: 'right',  line: { x1: x + width, y1: y, x2: x + width, y2: y + height } },
+            { type: 'bottom', line: { x1: x, y1: y + height, x2: x + width, y2: y + height } },
+            { type: 'left',   line: { x1: x, y1: y, x2: x, y2: y + height } }
+        ];
+
+        for (const edge of edges) {
+            if (pointToLineDistance(mousePos, edge.line) < EDGE_DETECTION_TOLERANCE) {
+                return edge.type;
+            }
+        }
+        return null;
+    }
+
+    _handleMouseDown(e) {
+        const mousePos = this._getMousePos(e).image;
+        if (this.state.finalRect) {
+            this.state.selectedCorner = this._findClosestCorner(mousePos);
+            if (this.state.selectedCorner) {
+                this.state.isDragging = true;
+            }
+        } else if (this.state.transparentRect) {
+            this.state.selectedEdge = this._findClosestEdge(mousePos);
+            if (this.state.selectedEdge) {
+                this.state.isDragging = true;
+                this.state.originalMousePos = mousePos;
+                this.state.isTransparentAreaModified = true;
+            }
+        }
+    }
+
+    _handleMouseMove(e) {
+        const mousePos = this._getMousePos(e).image;
+        let cursorStyle = 'default';
+
+        if (this.state.isDragging) {
+            if (this.state.selectedCorner) {
+                this.state.selectedCorner.x = mousePos.x;
+                this.state.selectedCorner.y = mousePos.y;
+                this._drawCorners();
+            } else if (this.state.selectedEdge) {
+                this._dragTransparentRectEdge(mousePos);
+            }
+        } else { // Handle hover effects
+            if (this.state.finalRect) {
+                if (this._findClosestCorner(mousePos)) cursorStyle = 'pointer';
+            } else if (this.state.transparentRect) {
+                if (this._findClosestEdge(mousePos)) cursorStyle = 'move';
+            }
+        }
+        this.elements.interactiveCanvas.style.cursor = cursorStyle;
+    }
+
+    _dragTransparentRectEdge(mousePos) {
+        const dx = mousePos.x - this.state.originalMousePos.x;
+        const dy = mousePos.y - this.state.originalMousePos.y;
+
+        switch (this.state.selectedEdge) {
+            case 'left':
+                this.state.transparentRect.width -= dx;
+                this.state.transparentRect.x += dx;
+                break;
+            case 'right':
+                this.state.transparentRect.width = mousePos.x - this.state.transparentRect.x;
+                break;
+            case 'top':
+                this.state.transparentRect.height -= dy;
+                this.state.transparentRect.y += dy;
+                break;
+            case 'bottom':
+                this.state.transparentRect.height = mousePos.y - this.state.transparentRect.y;
+                break;
+        }
+        this.state.originalMousePos = mousePos;
+        this._drawResult(false);
+    }
+    
+    _resetMouseState() {
+        this.state.isDragging = false;
+        this.state.selectedCorner = null;
+        this.state.selectedEdge = null;
+        this.state.originalMousePos = null;
+    }
+
+    _updateRectWithTransforms() {
+        if (!this.transform.originalRect || !this.state.finalRect) return;
+
+        const center = {
+            x: this.transform.originalRect.x + this.transform.originalRect.width / 2,
+            y: this.transform.originalRect.y + this.transform.originalRect.height / 2
+        };
+
+        const o = this.transform.originalRect;
+        const originalCorners = [
+            { x: o.x, y: o.y }, { x: o.x + o.width, y: o.y },
+            { x: o.x + o.width, y: o.y + o.height }, { x: o.x, y: o.y + o.height }
+        ];
+
+        this.state.corners = originalCorners.map(corner => {
+            const rotated = rotatePoint(corner, center, this.transform.rotation);
+            return scalePoint(rotated, center, this.transform.scale);
+        });
+
+        this._drawCorners();
+    }
+    
+    _updateInfoPanels() {
+        if (!this.state.finalRect || !this.selectedImage) return;
+        const rect = this.state.finalRect;
+        const img = this.selectedImage;
+
         const poInfoText = `
-            "x": ${toFloat(state.finalRect.x / selectedImage.width, 4)}, 
-            "y": ${toFloat(state.finalRect.y / selectedImage.height, 4)}, 
-            "w": ${toFloat(state.finalRect.width / selectedImage.width, 4)}, 
-            "h": ${toFloat(state.finalRect.height / selectedImage.height, 4)}
+            "x": ${toFloat(rect.x / img.width, 4)}, 
+            "y": ${toFloat(rect.y / img.height, 4)}, 
+            "w": ${toFloat(rect.width / img.width, 4)}, 
+            "h": ${toFloat(rect.height / img.height, 4)}
         `;
-        elements.poInfo.querySelector('.info-content').textContent = poInfoText;
+        this.elements.poInfo.querySelector('.info-content').textContent = poInfoText;
 
         const templateInfoText = `
-            "width": ${selectedImage.width}, 
-            "height": ${selectedImage.height}, 
-            "left": ${Math.round(state.finalRect.x)}, 
-            "top": ${Math.round(state.finalRect.y)}, 
-            "right": ${Math.round(state.finalRect.x + state.finalRect.width)}, 
-            "bottom": ${Math.round(state.finalRect.y + state.finalRect.height)}
+            "width": ${img.width}, 
+            "height": ${img.height}, 
+            "left": ${Math.round(rect.x)}, 
+            "top": ${Math.round(rect.y)}, 
+            "right": ${Math.round(rect.x + rect.width)}, 
+            "bottom": ${Math.round(rect.y + rect.height)}
         `;
-        elements.templateInfo.querySelector('.info-content').textContent = templateInfoText;
-
-        // Redraw result, this time including finalRect
-        const resultImage = drawResult(selectedImage, state.transparentRect, true);
-        elements.resultCanvas.getContext('2d').drawImage(resultImage, 0, 0);
-        drawCorners();
-
-        // Show calculate margins button
-        elements.calculateMarginsButton.style.visibility = 'visible';
-    });
-
-    // Calculate margins button click event
-    elements.calculateMarginsButton.addEventListener('click', () => {
-        if (!state.corners || state.corners.length !== 4 || !state.finalRect) {
-            alert('Please detect the transparent area and confirm the rectangle first!');
+        this.elements.templateInfo.querySelector('.info-content').textContent = templateInfoText;
+        
+        // After confirmation, the final rect becomes the base for the interactive corners
+        this.state.corners = [
+            { x: rect.x, y: rect.y },
+            { x: rect.x + rect.width, y: rect.y },
+            { x: rect.x + rect.width, y: rect.y + rect.height },
+            { x: rect.x, y: rect.y + rect.height }
+        ];
+    }
+    
+    _calculateAndDisplayMargins() {
+        if (!this.state.corners || this.state.corners.length !== 4 || !this.transform.originalRect) {
+            alert('Please process an image and confirm the selection first!');
             return;
         }
 
-        // Get original rectangle vertices
+        const o = this.transform.originalRect;
         const originalCorners = [
-            { x: state.finalRect.x, y: state.finalRect.y },
-            { x: state.finalRect.x + state.finalRect.width, y: state.finalRect.y },
-            { x: state.finalRect.x + state.finalRect.width, y: state.finalRect.y + state.finalRect.height },
-            { x: state.finalRect.x, y: state.finalRect.y + state.finalRect.height }
+            { x: o.x, y: o.y }, { x: o.x + o.width, y: o.y },
+            { x: o.x + o.width, y: o.y + o.height }, { x: o.x, y: o.y + o.height }
         ];
 
-        // Calculate offset for each vertex
-        const offsets = state.corners.map((corner, index) => {
+        const offsets = this.state.corners.map((corner, index) => {
             const originalCorner = originalCorners[index];
+            // Use a small tolerance to avoid floating point inaccuracies creating tiny margins
             return {
-                x: Math.abs(corner.x - originalCorner.x) > 1 ? Math.round(corner.x - originalCorner.x) : 0,
-                y: Math.abs(corner.y - originalCorner.y) > 1 ? Math.round(corner.y - originalCorner.y) : 0
+                x: Math.abs(corner.x - originalCorner.x) > 0.1 ? Math.round(corner.x - originalCorner.x) : 0,
+                y: Math.abs(corner.y - originalCorner.y) > 0.1 ? Math.round(corner.y - originalCorner.y) : 0
             };
         });
 
-        const width = selectedImage.width;
-        const height = selectedImage.height;
-        const marginInfo = offsets.every(offset => offset.x == 0 && offset.y == 0) ? null : `"margins": [
+        const hasNonZeroOffsets = offsets.some(offset => offset.x !== 0 || offset.y !== 0);
+        const { width, height } = this.selectedImage;
+        
+        const poMarginInfo = hasNonZeroOffsets ? `"margins": [
             ${toFloat(offsets[0].x / width)}, ${toFloat(offsets[0].y / height)}, 
             ${toFloat(offsets[1].x / width)}, ${toFloat(offsets[1].y / height)}, 
             ${toFloat(offsets[2].x / width)}, ${toFloat(offsets[2].y / height)}, 
             ${toFloat(offsets[3].x / width)}, ${toFloat(offsets[3].y / height)}
-        ]`;
-
-        const poInfoContent = elements.poInfo.querySelector('.info-content');
-        if (poInfoContent.textContent.includes("margins")) {
-            poInfoContent.textContent = marginInfo
-                ? poInfoContent.textContent.replace(/"margins":\s*\[[^\]]*\]/, marginInfo)
-                : poInfoContent.textContent.replace(/,\s*"margins":\s*\[[^\]]*\]/, '');
-        } else if (marginInfo) {
-            poInfoContent.textContent = poInfoContent.textContent.trimEnd() + `, ${marginInfo}`;
-        }
-
-        const templateMarginInfo = offsets.every(offset => offset.x == 0 && offset.y == 0) ? null : `"margins": [
+        ]` : null;
+        
+        const templateMarginInfo = hasNonZeroOffsets ? `"margins": [
             ${offsets[0].x}, ${offsets[0].y}, 
             ${offsets[1].x}, ${offsets[1].y}, 
             ${offsets[2].x}, ${offsets[2].y}, 
             ${offsets[3].x}, ${offsets[3].y}
-        ]`;
-        const templateInfoContent = elements.templateInfo.querySelector('.info-content');
-        if (templateInfoContent.textContent.includes("margins")) {
-            templateInfoContent.textContent = templateMarginInfo
-                ? templateInfoContent.textContent.replace(/"margins":\s*\[[^\]]*\]/, templateMarginInfo)
-                : templateInfoContent.textContent.replace(/,\s*"margins":\s*\[[^\]]*\]/, '');
-        } else if (templateMarginInfo) {
-            templateInfoContent.textContent = templateInfoContent.textContent.trimEnd() + `, ${templateMarginInfo}`;
+        ]` : null;
+        
+        this._updateMarginInfo(this.elements.poInfo, poMarginInfo);
+        this._updateMarginInfo(this.elements.templateInfo, templateMarginInfo);
+    }
+    
+    _updateMarginInfo(infoElement, marginJson) {
+        const contentElement = infoElement.querySelector('.info-content');
+        let currentText = contentElement.textContent;
+        
+        // A robust way to remove existing margins, if they exist.
+        currentText = currentText.replace(/,\s*"margins":\s*\[[^\]]*\]\s*$/, '');
+        
+        if (marginJson) {
+            contentElement.textContent = currentText.trimEnd() + `, ${marginJson}`;
+        } else {
+            contentElement.textContent = currentText;
         }
-    });
+    }
+}
+
+// Initialize event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    const app = new ImageProcessorApp();
+    app.init();
 });
