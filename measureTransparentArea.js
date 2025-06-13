@@ -2,7 +2,7 @@
 const createImageSelector = () => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/png';
+    input.accept = 'image/png, image/jpeg, image/webp';
     return input;
 }
 
@@ -93,7 +93,7 @@ const detectTransparentArea = (img) => {
 
     // Find the largest area
     if (areas.length === 0) {
-        return null;
+        return { x: 20, y: 20, width: img.width - 40, height: img.height - 40 };
     }
 
     console.log(areas);

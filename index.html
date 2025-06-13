@@ -326,7 +326,7 @@
         <div class="control-panel">
             <h1>Transparent Area Measurement Tool</h1>
             <a href="https://github.com/TerryPAC/MeasurePng" class="readme-link" target="_blank">Documentation</a>
-            <input type="file" id="imageInput" accept="image/png">
+            <input type="file" id="imageInput" accept="image/png, image/jpeg, image/webp">
 
             <div class="input-group">
                 <input type="number" id="productWidth" min="1" placeholder="Product Width">
@@ -352,7 +352,7 @@
             <button id="analyzeButton" class="primary-button">Start Detection</button>
             <button id="confirmButton" class="primary-button" style="visibility: hidden;">Confirm Detection Area</button>
             <button id="calculateMarginsButton" class="primary-button" style="visibility: hidden;">Calculate Margins</button>
-            
+
             <div class="control-group" style="display: none;" id="transformControls">
                 <div class="slider-container">
                     <label>Rotation</label>
