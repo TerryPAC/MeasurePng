@@ -64,6 +64,7 @@ class ImageProcessorApp {
             productWidthInput: document.getElementById('productWidth'),
             productHeightInput: document.getElementById('productHeight'),
             bleedInput: document.getElementById('bleed'),
+            alignmentControl: document.getElementById('alignmentControl'),
             analyzeButton: document.getElementById('analyzeButton'),
             confirmButton: document.getElementById('confirmButton'),
             poInfo: document.getElementById('poInfo'),
@@ -231,7 +232,7 @@ class ImageProcessorApp {
             canvas.style.height = `${canvasHeight * scale}px`;
         });
     }
-    
+
     _calculateCanvasScale(imageWidth, imageHeight, containerWidth, containerHeight) {
         const scaleX = containerWidth / imageWidth;
         const scaleY = containerHeight / imageHeight;
@@ -249,7 +250,7 @@ class ImageProcessorApp {
         const data = imageData.data;
         const visited = new Array(canvas.width * canvas.height).fill(false);
         const areas = [];
-        
+
         const floodFill = (startX, startY) => {
             const area = { minX: startX, minY: startY, maxX: startX, maxY: startY, pixels: 0 };
             const stack = [[startX, startY]];
@@ -295,7 +296,7 @@ class ImageProcessorApp {
 
         if (areas.length === 0) {
             const fallbackMargin = IMAGE_BORDER_OFFSET * 2;
-            return { x: fallbackMargin, y: fallbackMargin, width: img.width - fallbackMargin*2, height: img.height - fallbackMargin*2 };
+            return { x: fallbackMargin, y: fallbackMargin, width: img.width - fallbackMargin * 2, height: img.height - fallbackMargin * 2 };
         }
 
         const largestArea = areas.reduce((max, current) => current.pixels > max.pixels ? current : max);
@@ -319,8 +320,9 @@ class ImageProcessorApp {
 
         const bleed = parseFloat(this.elements.bleedInput.value) || 0;
         const bleedRatio = bleed / productWidth;
+        const alignment = this.elements.alignmentControl?.value || 'center';
 
-        this.state.finalRect = this._calculateAspectRatioRect(this.state.transparentRect, aspectRatio, bleedRatio);
+        this.state.finalRect = this._calculateAspectRatioRect(this.state.transparentRect, aspectRatio, bleedRatio, alignment);
         this.transform.originalRect = { ...this.state.finalRect };
 
         this._updateInfoPanels();
@@ -331,7 +333,7 @@ class ImageProcessorApp {
         this.elements.calculateMarginsButton.style.visibility = 'visible';
     }
 
-    _calculateAspectRatioRect(transparentArea, aspectRatio, bleedRatio) {
+    _calculateAspectRatioRect(transparentArea, aspectRatio, bleedRatio, alignment = 'center') {
         const { x, y, width, height } = transparentArea;
         let newWidth, newHeight;
         if (width / height > aspectRatio) {
@@ -342,15 +344,47 @@ class ImageProcessorApp {
             newWidth = newHeight * aspectRatio;
         }
 
-        const centerX = x + width / 2;
-        const centerY = y + height / 2;
         const bleeding = newWidth * bleedRatio;
         const finalWidth = newWidth + 2 * bleeding;
         const finalHeight = newHeight + 2 * bleeding;
 
+        let finalX, finalY;
+
+        // Horizontal alignment
+        switch (alignment) {
+            case 'left':
+                finalX = x - bleeding;
+                break;
+            case 'right':
+                finalX = x + width - finalWidth + bleeding;
+                break;
+            case 'top':
+            case 'bottom':
+            case 'center':
+            default:
+                finalX = x + (width - finalWidth) / 2;
+                break;
+        }
+
+        // Vertical alignment
+        switch (alignment) {
+            case 'top':
+                finalY = y - bleeding;
+                break;
+            case 'bottom':
+                finalY = y + height - finalHeight + bleeding;
+                break;
+            case 'left':
+            case 'right':
+            case 'center':
+            default:
+                finalY = y + (height - finalHeight) / 2;
+                break;
+        }
+
         return {
-            x: centerX - finalWidth / 2,
-            y: centerY - finalHeight / 2,
+            x: finalX,
+            y: finalY,
             width: finalWidth,
             height: finalHeight
         };
@@ -389,14 +423,14 @@ class ImageProcessorApp {
             ctx.strokeRect(this.state.finalRect.x + offsetX, this.state.finalRect.y + offsetY, this.state.finalRect.width, this.state.finalRect.height);
         }
     }
-    
+
     _drawCorners() {
         if (this.state.corners.length !== 4) return;
 
         const ctx = this.interactiveCtx;
         const offsetX = this.state.canvasOffset.x;
         const offsetY = this.state.canvasOffset.y;
-        
+
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
         ctx.strokeStyle = '#FF00FF';
         ctx.lineWidth = 2;
@@ -453,15 +487,15 @@ class ImageProcessorApp {
             return distance < CORNER_DETECTION_RADIUS;
         });
     }
-    
+
     _findClosestEdge(mousePos) {
         if (!this.state.transparentRect) return null;
         const { x, y, width, height } = this.state.transparentRect;
         const edges = [
-            { type: 'top',    line: { x1: x, y1: y, x2: x + width, y2: y } },
-            { type: 'right',  line: { x1: x + width, y1: y, x2: x + width, y2: y + height } },
+            { type: 'top', line: { x1: x, y1: y, x2: x + width, y2: y } },
+            { type: 'right', line: { x1: x + width, y1: y, x2: x + width, y2: y + height } },
             { type: 'bottom', line: { x1: x, y1: y + height, x2: x + width, y2: y + height } },
-            { type: 'left',   line: { x1: x, y1: y, x2: x, y2: y + height } }
+            { type: 'left', line: { x1: x, y1: y, x2: x, y2: y + height } }
         ];
 
         for (const edge of edges) {
@@ -534,7 +568,7 @@ class ImageProcessorApp {
         this.state.originalMousePos = mousePos;
         this._drawResult(false);
     }
-    
+
     _resetMouseState() {
         this.state.isDragging = false;
         this.state.selectedCorner = null;
@@ -563,7 +597,7 @@ class ImageProcessorApp {
 
         this._drawCorners();
     }
-    
+
     _updateInfoPanels() {
         if (!this.state.finalRect || !this.selectedImage) return;
         const rect = this.state.finalRect;
@@ -586,7 +620,7 @@ class ImageProcessorApp {
             "bottom": ${Math.round(rect.y + rect.height)}
         `;
         this.elements.templateInfo.querySelector('.info-content').textContent = templateInfoText;
-        
+
         // After confirmation, the final rect becomes the base for the interactive corners
         this.state.corners = [
             { x: rect.x, y: rect.y },
@@ -595,7 +629,7 @@ class ImageProcessorApp {
             { x: rect.x, y: rect.y + rect.height }
         ];
     }
-    
+
     _calculateAndDisplayMargins() {
         if (!this.state.corners || this.state.corners.length !== 4 || !this.transform.originalRect) {
             alert('Please process an image and confirm the selection first!');
@@ -619,32 +653,32 @@ class ImageProcessorApp {
 
         const hasNonZeroOffsets = offsets.some(offset => offset.x !== 0 || offset.y !== 0);
         const { width, height } = this.selectedImage;
-        
+
         const poMarginInfo = hasNonZeroOffsets ? `"margins": [
             ${toFloat(offsets[0].x / width)}, ${toFloat(offsets[0].y / height)}, 
             ${toFloat(offsets[1].x / width)}, ${toFloat(offsets[1].y / height)}, 
             ${toFloat(offsets[2].x / width)}, ${toFloat(offsets[2].y / height)}, 
             ${toFloat(offsets[3].x / width)}, ${toFloat(offsets[3].y / height)}
         ]` : null;
-        
+
         const templateMarginInfo = hasNonZeroOffsets ? `"margins": [
             ${offsets[0].x}, ${offsets[0].y}, 
             ${offsets[1].x}, ${offsets[1].y}, 
             ${offsets[2].x}, ${offsets[2].y}, 
             ${offsets[3].x}, ${offsets[3].y}
         ]` : null;
-        
+
         this._updateMarginInfo(this.elements.poInfo, poMarginInfo);
         this._updateMarginInfo(this.elements.templateInfo, templateMarginInfo);
     }
-    
+
     _updateMarginInfo(infoElement, marginJson) {
         const contentElement = infoElement.querySelector('.info-content');
         let currentText = contentElement.textContent;
-        
+
         // A robust way to remove existing margins, if they exist.
         currentText = currentText.replace(/,\s*"margins":\s*\[[^\]]*\]\s*$/, '');
-        
+
         if (marginJson) {
             contentElement.textContent = currentText.trimEnd() + `, ${marginJson}`;
         } else {

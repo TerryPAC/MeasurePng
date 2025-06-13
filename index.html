@@ -110,28 +110,63 @@
             margin: 8px 0;
             display: block;
             width: 100%;
-            padding: 10px;
+            padding: 6px;
             border: 1px solid #ccc;
             border-radius: 4px;
             box-sizing: border-box;
         }
 
         .input-group {
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
 
         .input-group label {
             display: block;
             margin-bottom: 5px;
+            font-size: 13px;
         }
 
         .input-group input[type="number"] {
             width: 100%;
-            padding: 8px;
+            padding: 6px;
             border: 1px solid #ccc;
             border-radius: 4px;
             margin-bottom: 8px;
             box-sizing: border-box;
+        }
+
+        .input-group select {
+            width: 100%;
+            padding: 6px 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+            background-color: white;
+            font-size: 13px;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url('data:image/svg+xml;utf8,<svg fill="%23444" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/><path d="M0 0h24v24H0z" fill="none"/></svg>');
+            background-repeat: no-repeat;
+            background-position: right 8px center;
+            padding-right: 30px;
+            cursor: pointer;
+        }
+
+        .input-group--horizontal {
+            display: flex;
+            align-items: center;
+        }
+
+        .input-group--horizontal label {
+            margin-bottom: 0;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+
+        .input-group--horizontal select {
+            width: auto;
+            flex-grow: 1;
         }
 
         .legend-container {
@@ -141,24 +176,21 @@
             border-radius: 6px;
         }
 
-        .legend-container h3 {
-            margin-top: 0;
-            margin-bottom: 8px;
-            font-size: 16px;
-            color: #333;
-        }
-
         .legend-item {
             display: flex;
             align-items: center;
-            margin-bottom: 6px;
+            margin-bottom: 7px;
+        }
+
+        .legend-item span {
+            font-size: 13px;
         }
 
         .color-box {
-            width: 16px;
-            height: 16px;
+            width: 14px;
+            height: 14px;
             margin-right: 10px;
-            border-width: 2px;
+            border-width: 1.3px;
             border-style: solid;
             background: transparent;
         }
@@ -309,12 +341,6 @@
         .control-group .input-group {
             margin-bottom: 0;
         }
-
-        .control-group span {
-            display: inline-block;
-            min-width: auto;
-            text-align: center;
-        }
     </style>
 </head>
 
@@ -335,6 +361,17 @@
                 <input type="number" id="productWidth" min="1" placeholder="Product Width">
                 <input type="number" id="productHeight" min="1" placeholder="Product Height">
                 <input type="number" id="bleed" min="0" placeholder="Bleed">
+            </div>
+
+            <div class="input-group input-group--horizontal">
+                <label for="alignmentControl">Alignment</label>
+                <select id="alignmentControl">
+                    <option value="center" selected>Center</option>
+                    <option value="top">Top</option>
+                    <option value="bottom">Bottom</option>
+                    <option value="right">Right</option>
+                    <option value="left">Left</option>
+                </select>
             </div>
 
             <div class="legend-container">
