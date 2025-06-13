@@ -157,15 +157,21 @@ const state = {
     transparentRect: null,
     isTransparentAreaModified: false,
     selectedEdge: null,
-    originalMousePos: null
+    originalMousePos: null,
+    canvasOffset: { x: 0, y: 0 }
 };
 
 // Draw result
 const drawResult = (img, transparentArea, drawFinal = false) => {
+    const canvasWidth = img.width * CANVAS_SCALE_FACTOR;
+    const canvasHeight = img.height * CANVAS_SCALE_FACTOR;
+    const offsetX = (canvasWidth - img.width) / 2;
+    const offsetY = (canvasHeight - img.height) / 2;
+
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = img.width;
-    canvas.height = img.height;
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
 
     // Draw checkerboard background
     const tileSize = 5; // Checkerboard tile size
@@ -177,14 +183,14 @@ const drawResult = (img, transparentArea, drawFinal = false) => {
     }
 
     // Draw original image
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(img, offsetX, offsetY);
 
     // Draw transparent area rectangle (green)
     ctx.strokeStyle = 'green';
     ctx.lineWidth = 1;
     ctx.strokeRect(
-        transparentArea.x,
-        transparentArea.y,
+        transparentArea.x + offsetX,
+        transparentArea.y + offsetY,
         transparentArea.width,
         transparentArea.height
     );
@@ -194,8 +200,8 @@ const drawResult = (img, transparentArea, drawFinal = false) => {
         ctx.strokeStyle = 'red';
         ctx.lineWidth = 1;
         ctx.strokeRect(
-            state.finalRect.x,
-            state.finalRect.y,
+            state.finalRect.x + offsetX,
+            state.finalRect.y + offsetY,
             state.finalRect.width,
             state.finalRect.height
         );
@@ -216,6 +222,9 @@ const drawResult = (img, transparentArea, drawFinal = false) => {
 const drawCorners = () => {
     if (!state.interactiveCtx || state.corners.length !== 4) return;
 
+    const offsetX = state.canvasOffset.x;
+    const offsetY = state.canvasOffset.y;
+
     state.interactiveCtx.clearRect(0, 0, state.interactiveCtx.canvas.width, state.interactiveCtx.canvas.height);
 
     state.interactiveCtx.strokeStyle = '#FF00FF';
@@ -223,27 +232,27 @@ const drawCorners = () => {
 
     // Draw connecting lines
     state.interactiveCtx.beginPath();
-    state.interactiveCtx.moveTo(state.corners[0].x, state.corners[0].y);
+    state.interactiveCtx.moveTo(state.corners[0].x + offsetX, state.corners[0].y + offsetY);
     for (let i = 1; i <= 4; i++) {
-        state.interactiveCtx.lineTo(state.corners[i % 4].x, state.corners[i % 4].y);
+        state.interactiveCtx.lineTo(state.corners[i % 4].x + offsetX, state.corners[i % 4].y + offsetY);
     }
     state.interactiveCtx.stroke();
 
     // Draw central axis
     state.interactiveCtx.beginPath();
-    state.interactiveCtx.moveTo((state.corners[0].x + state.corners[1].x) / 2, (state.corners[0].y + state.corners[1].y) / 2);
-    state.interactiveCtx.lineTo((state.corners[2].x + state.corners[3].x) / 2, (state.corners[2].y + state.corners[3].y) / 2);
+    state.interactiveCtx.moveTo((state.corners[0].x + state.corners[1].x) / 2 + offsetX, (state.corners[0].y + state.corners[1].y) / 2 + offsetY);
+    state.interactiveCtx.lineTo((state.corners[2].x + state.corners[3].x) / 2 + offsetX, (state.corners[2].y + state.corners[3].y) / 2 + offsetY);
     state.interactiveCtx.stroke();
 
     state.interactiveCtx.beginPath();
-    state.interactiveCtx.moveTo((state.corners[3].x + state.corners[0].x) / 2, (state.corners[3].y + state.corners[0].y) / 2);
-    state.interactiveCtx.lineTo((state.corners[1].x + state.corners[2].x) / 2, (state.corners[1].y + state.corners[2].y) / 2);
+    state.interactiveCtx.moveTo((state.corners[3].x + state.corners[0].x) / 2 + offsetX, (state.corners[3].y + state.corners[0].y) / 2 + offsetY);
+    state.interactiveCtx.lineTo((state.corners[1].x + state.corners[2].x) / 2 + offsetX, (state.corners[1].y + state.corners[2].y) / 2 + offsetY);
     state.interactiveCtx.stroke();
 
     // Draw vertices
     state.corners.forEach((corner, index) => {
         state.interactiveCtx.beginPath();
-        state.interactiveCtx.arc(corner.x, corner.y, 8, 0, Math.PI * 2);
+        state.interactiveCtx.arc(corner.x + offsetX, corner.y + offsetY, 8, 0, Math.PI * 2);
         state.interactiveCtx.fillStyle = '#00FF00';
         state.interactiveCtx.fill();
         state.interactiveCtx.strokeStyle = '#000000';
@@ -337,13 +346,20 @@ const pointToLineDistance = (point, line) => {
 // Utility functions
 const toFloat = (value, precision = 6) => parseFloat(value.toFixed(precision));
 
+const CANVAS_SCALE_FACTOR = 1.28;
+
 const getMousePos = (canvas, evt) => {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
+    const canvasX = (evt.clientX - rect.left) * scaleX;
+    const canvasY = (evt.clientY - rect.top) * scaleY;
     return {
-        x: (evt.clientX - rect.left) * scaleX,
-        y: (evt.clientY - rect.top) * scaleY
+        canvas: { x: canvasX, y: canvasY },
+        image: {
+            x: canvasX - state.canvasOffset.x,
+            y: canvasY - state.canvasOffset.y
+        }
     };
 }
 
@@ -419,7 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Mouse event handlers
     const handleMouseDown = (e) => {
-        const mousePos = getMousePos(elements.interactiveCanvas, e);
+        const mousePos = getMousePos(elements.interactiveCanvas, e).image;
         if (state.finalRect) {
             state.selectedCorner = findClosestCorner(mousePos);
             if (state.selectedCorner) {
@@ -436,7 +452,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const handleMouseMove = (e) => {
-        const mousePos = getMousePos(elements.interactiveCanvas, e);
+        const mousePos = getMousePos(elements.interactiveCanvas, e).image;
 
         if (state.finalRect) {
             const hoveredCorner = findClosestCorner(mousePos);
@@ -474,14 +490,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 state.originalMousePos = mousePos;
 
-                // Clear both canvases
+                // Clear result canvas before redrawing
                 elements.resultCanvas.getContext('2d').clearRect(0, 0, elements.resultCanvas.width, elements.resultCanvas.height);
-                state.interactiveCtx.clearRect(0, 0, elements.interactiveCanvas.width, elements.interactiveCanvas.height);
 
-                // Redraw original image and transparent area
-                elements.resultCanvas.getContext('2d').drawImage(selectedImage, 0, 0);
-                const resultImage = drawResult(selectedImage, state.transparentRect);
+                // Redraw result with updated transparent area
+                const resultImage = drawResult(selectedImage, state.transparentRect, false);
                 elements.resultCanvas.getContext('2d').drawImage(resultImage, 0, 0);
+
+                // Clear interactive canvas, as it's only for corners
+                state.interactiveCtx.clearRect(0, 0, elements.interactiveCanvas.width, elements.interactiveCanvas.height);
             }
         }
     };
@@ -590,20 +607,25 @@ document.addEventListener('DOMContentLoaded', () => {
         state.transparentRect = detectTransparentArea(selectedImage);
 
         // Set canvas size and style
+        const canvasWidth = selectedImage.width * CANVAS_SCALE_FACTOR;
+        const canvasHeight = selectedImage.height * CANVAS_SCALE_FACTOR;
+        state.canvasOffset.x = (canvasWidth - selectedImage.width) / 2;
+        state.canvasOffset.y = (canvasHeight - selectedImage.height) / 2;
+
         const container = document.querySelector('.canvas-container');
-        const containerWidth = container.clientWidth - 40;
-        const containerHeight = container.clientHeight - 40;
-        const scale = calculateCanvasScale(selectedImage.width, selectedImage.height, containerWidth, containerHeight);
+        const containerWidth = container.clientWidth;
+        const containerHeight = container.clientHeight;
+        const scale = calculateCanvasScale(canvasWidth, canvasHeight, containerWidth, containerHeight);
 
-        elements.resultCanvas.width = selectedImage.width;
-        elements.resultCanvas.height = selectedImage.height;
-        elements.resultCanvas.style.width = `${selectedImage.width * scale}px`;
-        elements.resultCanvas.style.height = `${selectedImage.height * scale}px`;
+        elements.resultCanvas.width = canvasWidth;
+        elements.resultCanvas.height = canvasHeight;
+        elements.resultCanvas.style.width = `${canvasWidth * scale}px`;
+        elements.resultCanvas.style.height = `${canvasHeight * scale}px`;
 
-        elements.interactiveCanvas.width = selectedImage.width;
-        elements.interactiveCanvas.height = selectedImage.height;
-        elements.interactiveCanvas.style.width = `${selectedImage.width * scale}px`;
-        elements.interactiveCanvas.style.height = `${selectedImage.height * scale}px`;
+        elements.interactiveCanvas.width = canvasWidth;
+        elements.interactiveCanvas.height = canvasHeight;
+        elements.interactiveCanvas.style.width = `${canvasWidth * scale}px`;
+        elements.interactiveCanvas.style.height = `${canvasHeight * scale}px`;
 
         // Draw result
         const resultImage = drawResult(selectedImage, state.transparentRect);
