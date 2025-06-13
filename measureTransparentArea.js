@@ -4,7 +4,7 @@ const IMAGE_BORDER_OFFSET = 10; // Px offset from image edges to start transpare
 const CORNER_DETECTION_RADIUS = 15; // Px radius to detect mouse hover over a corner
 const EDGE_DETECTION_TOLERANCE = 10; // Px distance to detect mouse hover over an edge
 const CHECKERBOARD_TILE_SIZE = 5; // Px size for the canvas background checkerboard tiles
-const CANVAS_SCALE_FACTOR = 1.28; // Scale factor to provide padding around the image
+const CANVAS_SCALE_FACTOR = 1.2; // Scale factor to provide padding around the image
 
 // Utility functions
 const toFloat = (value, precision = 6) => parseFloat(value.toFixed(precision));
@@ -65,6 +65,8 @@ class ImageProcessorApp {
             productHeightInput: document.getElementById('productHeight'),
             bleedInput: document.getElementById('bleed'),
             alignmentControl: document.getElementById('alignmentControl'),
+            horizontalGuidesInput: document.getElementById('horizontalGuidesInput'),
+            verticalGuidesInput: document.getElementById('verticalGuidesInput'),
             analyzeButton: document.getElementById('analyzeButton'),
             confirmButton: document.getElementById('confirmButton'),
             poInfo: document.getElementById('poInfo'),
@@ -127,6 +129,9 @@ class ImageProcessorApp {
             this.elements.scaleValue.textContent = this.transform.scale.toFixed(2);
             this._updateRectWithTransforms();
         });
+
+        this.elements.horizontalGuidesInput.addEventListener('input', () => this._drawCorners());
+        this.elements.verticalGuidesInput.addEventListener('input', () => this._drawCorners());
 
         document.querySelectorAll('.copy-button').forEach(button => {
             button.addEventListener('click', async () => {
@@ -443,15 +448,8 @@ class ImageProcessorApp {
         }
         ctx.stroke();
 
-        // Draw central axes
-        ctx.beginPath();
-        ctx.moveTo((this.state.corners[0].x + this.state.corners[1].x) / 2 + offsetX, (this.state.corners[0].y + this.state.corners[1].y) / 2 + offsetY);
-        ctx.lineTo((this.state.corners[2].x + this.state.corners[3].x) / 2 + offsetX, (this.state.corners[2].y + this.state.corners[3].y) / 2 + offsetY);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo((this.state.corners[3].x + this.state.corners[0].x) / 2 + offsetX, (this.state.corners[3].y + this.state.corners[0].y) / 2 + offsetY);
-        ctx.lineTo((this.state.corners[1].x + this.state.corners[2].x) / 2 + offsetX, (this.state.corners[1].y + this.state.corners[2].y) / 2 + offsetY);
-        ctx.stroke();
+        // Draw Guide Lines
+        this._drawGuideLines(ctx, offsetX, offsetY);
 
         // Draw vertices
         this.state.corners.forEach(corner => {
@@ -463,6 +461,67 @@ class ImageProcessorApp {
             ctx.lineWidth = 2;
             ctx.stroke();
         });
+    }
+
+    _drawGuideLines(ctx, offsetX, offsetY) {
+        const hValues = this._parseGuideValues(this.elements.horizontalGuidesInput.value);
+        const vValues = this._parseGuideValues(this.elements.verticalGuidesInput.value);
+
+        const [c0, c1, c2, c3] = this.state.corners; // tl, tr, br, bl
+
+        ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)'; // Semi-transparent magenta
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 3]); // Dashed lines for guides
+
+        // Draw horizontal guides (from V-values)
+        vValues.forEach(p => {
+            const p1 = {
+                x: c0.x + p * (c3.x - c0.x),
+                y: c0.y + p * (c3.y - c0.y)
+            };
+            const p2 = {
+                x: c1.x + p * (c2.x - c1.x),
+                y: c1.y + p * (c2.y - c1.y)
+            };
+            ctx.beginPath();
+            ctx.moveTo(p1.x + offsetX, p1.y + offsetY);
+            ctx.lineTo(p2.x + offsetX, p2.y + offsetY);
+            ctx.stroke();
+        });
+
+        // Draw vertical guides (from H-values)
+        hValues.forEach(p => {
+            const p1 = {
+                x: c0.x + p * (c1.x - c0.x),
+                y: c0.y + p * (c1.y - c0.y)
+            };
+            const p2 = {
+                x: c3.x + p * (c2.x - c3.x),
+                y: c3.y + p * (c2.y - c3.y)
+            };
+            ctx.beginPath();
+            ctx.moveTo(p1.x + offsetX, p1.y + offsetY);
+            ctx.lineTo(p2.x + offsetX, p2.y + offsetY);
+            ctx.stroke();
+        });
+
+        ctx.setLineDash([]); // Reset line dash for other drawings
+    }
+
+    _parseGuideValues(inputValue) {
+        if (!inputValue) {
+            return [0.5];
+        }
+
+        const values = inputValue
+            .split(',')
+            .map(v => parseFloat(v.trim()))
+            .filter(v => !isNaN(v) && v >= 0 && v <= 1);
+
+        const guideSet = new Set(values);
+        guideSet.add(0.5); // Ensure center line is always present
+
+        return Array.from(guideSet);
     }
 
     _getMousePos(evt) {
