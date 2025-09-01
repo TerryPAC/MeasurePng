@@ -19,10 +19,9 @@
         }
 
         .display-area {
-            flex: 1;
+            flex: 5;
             padding: 0px;
             background: #f9f9f9;
-            min-width: 60%;
         }
 
         .canvas-container {
@@ -46,14 +45,14 @@
         }
 
         .control-panel {
-            width: 400px;
+            flex: 2;
             padding: 20px;
             background: white;
             box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
         }
 
         /* Control Panel Header */
-        h1 {
+        .panel-title {
             text-align: center;
             color: #4CAF50;
             margin-top: 0;
@@ -104,6 +103,18 @@
 
         .input-group input[type="number"] {
             margin-bottom: 8px;
+        }
+
+        .input-group.row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .input-group.row input {
+            flex: 1;
+            margin-bottom: 0;
         }
 
         .input-group select {
@@ -188,20 +199,20 @@
         }
 
         .color-box.green {
-            border-color: rgb(0, 200, 0);
+            border-color: rgb(0, 240, 0);
         }
 
-        .color-box.red {
-            border-color: rgb(240, 2, 2);
+        .color-box.blue {
+            border-color: rgb(0, 0, 252);
         }
 
         .color-box.magenta {
-            border-color: rgb(240, 0, 240);
+            border-color: rgb(252, 0, 200);
         }
 
         /* Buttons */
         .primary-button {
-            margin: 6px 0;
+            margin: 6px auto;
             padding: 8px 20px;
             background-color: #4CAF50;
             color: white;
@@ -210,7 +221,8 @@
             cursor: pointer;
             font-size: 14px;
             transition: background-color 0.3s;
-            width: 100%;
+            width: 88%;
+            display: block;
         }
 
         .primary-button:hover {
@@ -231,7 +243,8 @@
         }
 
         .slider-container {
-            position: relative;
+            display: flex;
+            align-items: center;
             margin-bottom: 15px;
         }
 
@@ -239,32 +252,54 @@
             margin-bottom: 0;
         }
 
-        .slider-container label {
-            display: block;
+        .control-row {
+            display: flex;
+            gap: 20px;
+            align-items: flex-start;
+        }
+
+        .control-row .slider-container {
+            flex: 1;
+            margin-bottom: 0;
+            padding-bottom: 20px;
+            position: relative;
+            flex-wrap: wrap;
+        }
+
+        .control-row .slider-container label {
+            width: 100%;
             margin-bottom: 5px;
+        }
+        
+        .slider-container output {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #4CAF50;
+            color: white;
+            padding: 2px 5px;
+            border-radius: 4px;
+            font-size: 12px;
+            min-width: 32px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+            pointer-events: none;
+        }
+
+        .slider-container label {
             font-size: 12px;
             font-weight: 500;
             color: #555;
-        }
-
-        .slider-container .slider-value {
-            position: absolute;
-            top: 0;
-            right: 0;
-            background: #4CAF50;
-            color: white;
-            padding: 2px 4px;
-            border-radius: 12px;
-            font-size: 12px;
-            min-width: 24px;
-            text-align: center;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+            margin-right: 10px;
+            white-space: nowrap;
         }
 
         input[type="range"] {
             -webkit-appearance: none;
             appearance: none;
             width: 100%;
+            flex-grow: 1;
             height: 4px;
             background: #e9e9e9;
             border-radius: 2px;
@@ -383,11 +418,11 @@
             </div>
         </div>
         <div class="control-panel">
-            <h1>Transparent Area Measurement Tool</h1>
+            <h2 class="panel-title">Transparent Area Tool</h2>
             <a href="https://github.com/TerryPAC/MeasurePng" class="readme-link" target="_blank">Documentation</a>
             <input type="file" id="imageInput" accept="image/png, image/jpeg, image/webp">
 
-            <div class="input-group">
+            <div class="input-group row">
                 <input type="number" id="productWidth" min="1" placeholder="Product Width">
                 <input type="number" id="productHeight" min="1" placeholder="Product Height">
                 <input type="number" id="bleed" min="0" placeholder="Bleed">
@@ -414,13 +449,20 @@
                 </div>
             </div>
 
+            <div class="control-group">
+                <div class="slider-container">
+                    <label>Canvas Scale</label>
+                    <input type="range" id="canvasScaleControl" min="1" max="2" value="1" step="0.1">
+                </div>
+            </div>
+
             <div class="legend-container">
                 <div class="legend-item">
                     <div class="color-box green"></div>
                     <span>Transparent Area</span>
                 </div>
                 <div class="legend-item">
-                    <div class="color-box red"></div>
+                    <div class="color-box blue"></div>
                     <span>Printable Rect</span>
                 </div>
                 <div class="legend-item">
@@ -434,15 +476,17 @@
             <button id="calculateMarginsButton" class="primary-button" style="visibility: hidden;">Calculate Margins</button>
 
             <div class="control-group" style="display: none;" id="transformControls">
-                <div class="slider-container">
-                    <label>Rotation</label>
-                    <span class="slider-value" id="rotationValue">0°</span>
-                    <input type="range" id="rotationControl" min="-90" max="90" value="0" step="1">
-                </div>
-                <div class="slider-container">
-                    <label>Scale</label>
-                    <span class="slider-value" id="scaleValue">1.0</span>
-                    <input type="range" id="scaleControl" min="50" max="200" value="100" step="1">
+                <div class="control-row">
+                    <div class="slider-container">
+                        <label for="rotationControl">Rotation</label>
+                        <input type="range" id="rotationControl" min="-90" max="90" value="0" step="1">
+                        <output id="rotationValue">0°</output>
+                    </div>
+                    <div class="slider-container">
+                        <label for="scaleControl">Scale</label>
+                        <input type="range" id="scaleControl" min="50" max="200" value="100" step="1">
+                        <output id="scaleValue">1.0</output>
+                    </div>
                 </div>
             </div>
             <div class="result-info" id="poInfo">
@@ -468,7 +512,7 @@
                 <button class="copy-button" data-target="positionsInfo">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                     </svg>
                 </button>
             </div>

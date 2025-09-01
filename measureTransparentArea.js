@@ -4,7 +4,7 @@ const IMAGE_BORDER_OFFSET = 10; // Px offset from image edges to start transpare
 const CORNER_DETECTION_RADIUS = 15; // Px radius to detect mouse hover over a corner
 const EDGE_DETECTION_TOLERANCE = 10; // Px distance to detect mouse hover over an edge
 const CHECKERBOARD_TILE_SIZE = 2; // Px size for the canvas background checkerboard tiles
-const CANVAS_SCALE_FACTOR = 1.2; // Scale factor to provide padding around the image
+const MIN_AREA_PIXELS = 100; // Minimum pixel count for a transparent area
 
 // Utility functions
 const toFloat = (value, precision = 6) => parseFloat(value.toFixed(precision));
@@ -80,18 +80,19 @@ class ImageProcessorApp {
       scaleControl: document.getElementById('scaleControl'),
       rotationValue: document.getElementById('rotationValue'),
       scaleValue: document.getElementById('scaleValue'),
+      canvasScaleControl: document.getElementById('canvasScaleControl'),
     };
     this.interactiveCtx = this.elements.interactiveCanvas.getContext('2d');
     this.selectedImage = null;
 
     this.state = {
-      corners: [],
+      cornerSets: [], // Array of corner arrays for each area
       isDragging: false,
-      selectedCorner: null,
-      finalRect: null,
-      transparentRect: null,
+      selectedCornerInfo: null, // { areaIndex, cornerIndex }
+      finalRects: [],
+      transparentRects: [],
       isTransparentAreaModified: false,
-      selectedEdge: null,
+      selectedEdgeInfo: null, // { areaIndex, edgeType }
       originalMousePos: null,
       canvasOffset: { x: 0, y: 0 },
     };
@@ -99,7 +100,7 @@ class ImageProcessorApp {
     this.transform = {
       rotation: 0,
       scale: 1,
-      originalRect: null,
+      originalRects: [], // Store original rects for each area
     };
   }
 
@@ -120,19 +121,27 @@ class ImageProcessorApp {
     this.elements.calculateMarginsButton.addEventListener('click', () => this._calculateAndDisplayMargins());
 
     this.elements.rotationControl.addEventListener('input', (e) => {
-      this.transform.rotation = parseFloat(e.target.value);
-      this.elements.rotationValue.textContent = `${this.transform.rotation}°`;
+      const slider = e.target;
+      this.transform.rotation = parseFloat(slider.value);
+      const output = this.elements.rotationValue;
+      output.textContent = `${this.transform.rotation}°`;
       this._updateRectWithTransforms();
+      this._updateSliderValuePosition(slider, output);
     });
 
     this.elements.scaleControl.addEventListener('input', (e) => {
-      this.transform.scale = parseFloat(e.target.value) / 100;
-      this.elements.scaleValue.textContent = this.transform.scale.toFixed(2);
+      const slider = e.target;
+      this.transform.scale = parseFloat(slider.value) / 100;
+      const output = this.elements.scaleValue;
+      output.textContent = this.transform.scale.toFixed(2);
       this._updateRectWithTransforms();
+      this._updateSliderValuePosition(slider, output);
     });
 
     this.elements.horizontalGuidesInput.addEventListener('input', () => this._drawCorners());
     this.elements.verticalGuidesInput.addEventListener('input', () => this._drawCorners());
+
+    this.elements.canvasScaleControl.addEventListener('input', (e) => this._handleCanvasScaleChange(e));
 
     document.querySelectorAll('.copy-button').forEach(button => {
       button.addEventListener('click', async () => {
@@ -153,11 +162,21 @@ class ImageProcessorApp {
     });
   }
 
+  _handleCanvasScaleChange(e) {
+    if (this.selectedImage) {
+      this._setupCanvases();
+      this._drawResult(this.state.finalRects.length > 0);
+      if (this.state.finalRects.length > 0) {
+        this._drawCorners();
+      }
+    }
+  }
+
   _resetAppState() {
-    this.state.transparentRect = null;
-    this.state.finalRect = null;
+    this.state.transparentRects = [];
+    this.state.finalRects = [];
     this.state.isTransparentAreaModified = false;
-    this.state.corners = [];
+    this.state.cornerSets = [];
     this.elements.confirmButton.style.visibility = 'hidden';
     this.elements.transformControls.style.display = 'none';
     this.elements.poInfo.querySelector('.info-content').textContent = '';
@@ -168,12 +187,20 @@ class ImageProcessorApp {
 
     this.transform.rotation = 0;
     this.transform.scale = 1;
-    this.transform.originalRect = null;
+    this.transform.originalRects = [];
 
     this.elements.rotationControl.value = 0;
     this.elements.scaleControl.value = 100;
     this.elements.rotationValue.textContent = '0°';
     this.elements.scaleValue.textContent = '1.0';
+    this.elements.canvasScaleControl.value = 1;
+
+    if (this.elements.rotationValue.style) {
+      this.elements.rotationValue.style.left = '50%';
+    }
+    if (this.elements.scaleValue.style) {
+      this.elements.scaleValue.style.left = '50%';
+    }
 
     if (this.interactiveCtx) {
       this.interactiveCtx.clearRect(0, 0, this.elements.interactiveCanvas.width, this.elements.interactiveCanvas.height);
@@ -217,7 +244,7 @@ class ImageProcessorApp {
       return;
     }
 
-    this.state.transparentRect = this._detectTransparentArea(this.selectedImage);
+    this.state.transparentRects = this._detectTransparentArea(this.selectedImage);
     this._setupCanvases();
     this._drawResult();
     this.elements.confirmButton.style.visibility = 'visible';
@@ -225,8 +252,9 @@ class ImageProcessorApp {
 
   _setupCanvases() {
     const img = this.selectedImage;
-    const canvasWidth = img.width * CANVAS_SCALE_FACTOR;
-    const canvasHeight = img.height * CANVAS_SCALE_FACTOR;
+    const canvasScaleFactor = parseFloat(this.elements.canvasScaleControl.value);
+    const canvasWidth = img.width * canvasScaleFactor;
+    const canvasHeight = img.height * canvasScaleFactor;
     this.state.canvasOffset.x = (canvasWidth - img.width) / 2;
     this.state.canvasOffset.y = (canvasHeight - img.height) / 2;
 
@@ -294,7 +322,7 @@ class ImageProcessorApp {
         const index = y * canvas.width + x;
         if (!visited[index] && data[index * 4 + 3] < ALPHA_THRESHOLD) {
           const area = floodFill(x, y);
-          if (area.pixels > 0) {
+          if (area.pixels > MIN_AREA_PIXELS) {
             areas.push(area);
           }
         }
@@ -303,46 +331,68 @@ class ImageProcessorApp {
 
     if (areas.length === 0) {
       const fallbackMargin = IMAGE_BORDER_OFFSET * 2;
-      return {
+      return [{
         x: fallbackMargin,
         y: fallbackMargin,
         width: img.width - fallbackMargin * 2,
         height: img.height - fallbackMargin * 2,
-      };
+      }];
     }
 
-    const largestArea = areas.reduce((max, current) => current.pixels > max.pixels ? current : max);
+    areas.sort((a, b) => b.pixels - a.pixels);
 
-    return {
-      x: largestArea.minX - 1,
-      y: largestArea.minY - 1,
-      width: largestArea.maxX - largestArea.minX + 2,
-      height: largestArea.maxY - largestArea.minY + 2,
-    };
+    return areas.map(area => ({
+      x: area.minX - 1,
+      y: area.minY - 1,
+      width: area.maxX - area.minX + 2,
+      height: area.maxY - area.minY + 2,
+    }));
   }
 
   _confirmSelection() {
-    if (!this.state.transparentRect) return;
+    if (this.state.transparentRects.length === 0) return;
 
-    const productWidth = parseFloat(this.elements.productWidthInput.value) || 1;
-    const productHeight = parseFloat(this.elements.productHeightInput.value) || 1;
-    const aspectRatio = this.elements.productWidthInput.value && this.elements.productHeightInput.value
-      ? productWidth / productHeight
-      : this.state.transparentRect.width / this.state.transparentRect.height;
+    const isMultiArea = this.state.transparentRects.length > 1;
 
-    const bleed = parseFloat(this.elements.bleedInput.value) || 0;
-    const bleedRatio = bleed / productWidth;
-    const alignment = this.elements.alignmentControl?.value || 'center';
+    if (isMultiArea) {
+      this.state.finalRects = this.state.transparentRects.map(rect => ({ ...rect }));
+      this.transform.originalRects = this.state.transparentRects.map(rect => ({ ...rect }));
+      this.elements.transformControls.style.display = 'none';
+    } else {
+      const productWidth = parseFloat(this.elements.productWidthInput.value) || 1;
+      const productHeight = parseFloat(this.elements.productHeightInput.value) || 1;
+      const transparentRect = this.state.transparentRects[0];
+      const aspectRatio = this.elements.productWidthInput.value && this.elements.productHeightInput.value
+        ? productWidth / productHeight
+        : transparentRect.width / transparentRect.height;
 
-    this.state.finalRect = this._calculateAspectRatioRect(this.state.transparentRect, aspectRatio, bleedRatio, alignment);
-    this.transform.originalRect = { ...this.state.finalRect };
+      const bleed = parseFloat(this.elements.bleedInput.value) || 0;
+      const bleedRatio = bleed / productWidth;
+      const alignment = this.elements.alignmentControl?.value || 'center';
 
+      this.state.finalRects = [this._calculateAspectRatioRect(transparentRect, aspectRatio, bleedRatio, alignment)];
+      this.transform.originalRects = [{ ...this.state.finalRects[0] }];
+      this.elements.transformControls.style.display = 'block';
+
+      // Update slider value positions after they become visible
+      this._updateSliderValuePosition(this.elements.rotationControl, this.elements.rotationValue);
+      this._updateSliderValuePosition(this.elements.scaleControl, this.elements.scaleValue);
+    }
+
+    this._initializeCorners();
     this._updateInfoPanels();
     this._drawResult(true);
     this._drawCorners();
-
-    this.elements.transformControls.style.display = 'block';
     this.elements.calculateMarginsButton.style.visibility = 'visible';
+  }
+
+  _initializeCorners() {
+    this.state.cornerSets = this.state.finalRects.map(rect => [
+      { x: rect.x, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y },
+      { x: rect.x + rect.width, y: rect.y + rect.height },
+      { x: rect.x, y: rect.y + rect.height },
+    ]);
   }
 
   _calculateAspectRatioRect(transparentArea, aspectRatio, bleedRatio, alignment = 'center') {
@@ -404,7 +454,6 @@ class ImageProcessorApp {
 
   _drawResult(drawFinal = false) {
     const img = this.selectedImage;
-    const transparentArea = this.state.transparentRect;
     const canvas = this.elements.resultCanvas;
     const ctx = canvas.getContext('2d');
     const offsetX = this.state.canvasOffset.x;
@@ -423,68 +472,78 @@ class ImageProcessorApp {
     // Draw original image
     ctx.drawImage(img, offsetX, offsetY);
 
-    // Draw transparent area rectangle (green)
-    ctx.strokeStyle = 'green';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(
-      transparentArea.x + offsetX,
-      transparentArea.y + offsetY,
-      transparentArea.width,
-      transparentArea.height
-    );
-
-    // Draw final red rectangle
-    if (drawFinal && this.state.finalRect) {
-      ctx.strokeStyle = 'red';
+    // Draw transparent area rectangles (green)
+    this.state.transparentRects.forEach(transparentArea => {
+      ctx.strokeStyle = 'green';
       ctx.lineWidth = 1;
       ctx.strokeRect(
-        this.state.finalRect.x + offsetX,
-        this.state.finalRect.y + offsetY,
-        this.state.finalRect.width,
-        this.state.finalRect.height
+        transparentArea.x + offsetX,
+        transparentArea.y + offsetY,
+        transparentArea.width,
+        transparentArea.height
       );
+    });
+
+    // Draw final red rectangles
+    if (drawFinal) {
+      this.state.finalRects.forEach(finalRect => {
+        ctx.strokeStyle = 'blue';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(
+          finalRect.x + offsetX,
+          finalRect.y + offsetY,
+          finalRect.width,
+          finalRect.height
+        );
+      });
     }
   }
 
   _drawCorners() {
-    if (this.state.corners.length !== 4) return;
+    if (this.state.cornerSets.length === 0) return;
 
     const ctx = this.interactiveCtx;
     const offsetX = this.state.canvasOffset.x;
     const offsetY = this.state.canvasOffset.y;
 
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    ctx.strokeStyle = '#FF00FF';
     ctx.lineWidth = 2;
 
-    // Draw connecting lines
-    ctx.beginPath();
-    ctx.moveTo(this.state.corners[0].x + offsetX, this.state.corners[0].y + offsetY);
-    for (let i = 1; i <= 4; i++) {
-      ctx.lineTo(this.state.corners[i % 4].x + offsetX, this.state.corners[i % 4].y + offsetY);
-    }
-    ctx.stroke();
-
-    // Draw Guide Lines
-    this._drawGuideLines(ctx, offsetX, offsetY);
-
-    // Draw vertices
-    this.state.corners.forEach(corner => {
+    this.state.cornerSets.forEach(corners => {
+      // Draw connecting lines
+      ctx.strokeStyle = 'magenta';
       ctx.beginPath();
-      ctx.arc(corner.x + offsetX, corner.y + offsetY, 8, 0, Math.PI * 2);
-      ctx.fillStyle = '#00FF00';
-      ctx.fill();
-      ctx.strokeStyle = '#000000';
-      ctx.lineWidth = 2;
+      ctx.moveTo(corners[0].x + offsetX, corners[0].y + offsetY);
+      for (let i = 1; i <= 4; i++) {
+        ctx.lineTo(corners[i % 4].x + offsetX, corners[i % 4].y + offsetY);
+      }
       ctx.stroke();
+
+      // Draw Guide Lines for this set of corners
+      this._drawGuideLinesForCorners(ctx, offsetX, offsetY, corners);
+
+      // Draw vertices
+      corners.forEach(corner => {
+        ctx.beginPath();
+        ctx.arc(corner.x + offsetX, corner.y + offsetY, 8, 0, Math.PI * 2);
+        ctx.fillStyle = '#00FF00';
+        ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      });
     });
   }
 
-  _drawGuideLines(ctx, offsetX, offsetY) {
+  _drawGuideLinesForCorners(ctx, offsetX, offsetY, corners) {
     const hValues = this._parseGuideValues(this.elements.horizontalGuidesInput.value);
     const vValues = this._parseGuideValues(this.elements.verticalGuidesInput.value);
 
-    const [c0, c1, c2, c3] = this.state.corners; // tl, tr, br, bl
+    const [c0, c1, c2, c3] = corners; // tl, tr, br, bl
+
+    const originalStrokeStyle = ctx.strokeStyle;
+    const originalLineWidth = ctx.lineWidth;
+    const originalLineDash = ctx.getLineDash();
 
     ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)'; // Semi-transparent magenta
     ctx.lineWidth = 2;
@@ -492,14 +551,8 @@ class ImageProcessorApp {
 
     // Draw horizontal guides (from V-values)
     vValues.forEach(p => {
-      const p1 = {
-        x: c0.x + p * (c3.x - c0.x),
-        y: c0.y + p * (c3.y - c0.y)
-      };
-      const p2 = {
-        x: c1.x + p * (c2.x - c1.x),
-        y: c1.y + p * (c2.y - c1.y)
-      };
+      const p1 = { x: c0.x + p * (c3.x - c0.x), y: c0.y + p * (c3.y - c0.y) };
+      const p2 = { x: c1.x + p * (c2.x - c1.x), y: c1.y + p * (c2.y - c1.y) };
       ctx.beginPath();
       ctx.moveTo(p1.x + offsetX, p1.y + offsetY);
       ctx.lineTo(p2.x + offsetX, p2.y + offsetY);
@@ -508,21 +561,26 @@ class ImageProcessorApp {
 
     // Draw vertical guides (from H-values)
     hValues.forEach(p => {
-      const p1 = {
-        x: c0.x + p * (c1.x - c0.x),
-        y: c0.y + p * (c1.y - c0.y)
-      };
-      const p2 = {
-        x: c3.x + p * (c2.x - c3.x),
-        y: c3.y + p * (c2.y - c3.y)
-      };
+      const p1 = { x: c0.x + p * (c1.x - c0.x), y: c0.y + p * (c1.y - c0.y) };
+      const p2 = { x: c3.x + p * (c2.x - c3.x), y: c3.y + p * (c2.y - c3.y) };
       ctx.beginPath();
       ctx.moveTo(p1.x + offsetX, p1.y + offsetY);
       ctx.lineTo(p2.x + offsetX, p2.y + offsetY);
       ctx.stroke();
     });
 
-    ctx.setLineDash([]); // Reset line dash for other drawings
+    ctx.strokeStyle = originalStrokeStyle;
+    ctx.lineWidth = originalLineWidth;
+    ctx.setLineDash(originalLineDash); // Reset line dash
+  }
+
+  _drawGuideLines(ctx, offsetX, offsetY) {
+    // This method is now a wrapper that calls the new method for each corner set.
+    // It's kept for potential partial refactors, but the main logic is moved.
+    // The main call from _drawCorners is now directly to _drawGuideLinesForCorners.
+    this.state.cornerSets.forEach(corners => {
+      this._drawGuideLinesForCorners(ctx, offsetX, offsetY, corners);
+    });
   }
 
   _parseGuideValues(inputValue) {
@@ -558,25 +616,36 @@ class ImageProcessorApp {
   }
 
   _findClosestCorner(mousePos) {
-    return this.state.corners.find(corner => {
-      const distance = Math.hypot(corner.x - mousePos.x, corner.y - mousePos.y);
-      return distance < CORNER_DETECTION_RADIUS;
-    });
+    for (let i = 0; i < this.state.cornerSets.length; i++) {
+      const corners = this.state.cornerSets[i];
+      for (let j = 0; j < corners.length; j++) {
+        const corner = corners[j];
+        const distance = Math.hypot(corner.x - mousePos.x, corner.y - mousePos.y);
+        if (distance < CORNER_DETECTION_RADIUS) {
+          return { areaIndex: i, cornerIndex: j };
+        }
+      }
+    }
+    return null;
   }
 
   _findClosestEdge(mousePos) {
-    if (!this.state.transparentRect) return null;
-    const { x, y, width, height } = this.state.transparentRect;
-    const edges = [
-      { type: 'top', line: { x1: x, y1: y, x2: x + width, y2: y } },
-      { type: 'right', line: { x1: x + width, y1: y, x2: x + width, y2: y + height } },
-      { type: 'bottom', line: { x1: x, y1: y + height, x2: x + width, y2: y + height } },
-      { type: 'left', line: { x1: x, y1: y, x2: x, y2: y + height } }
-    ];
+    if (this.state.transparentRects.length === 0) return null;
 
-    for (const edge of edges) {
-      if (pointToLineDistance(mousePos, edge.line) < EDGE_DETECTION_TOLERANCE) {
-        return edge.type;
+    for (let i = 0; i < this.state.transparentRects.length; i++) {
+      const rect = this.state.transparentRects[i];
+      const { x, y, width, height } = rect;
+      const edges = [
+        { type: 'top', line: { x1: x, y1: y, x2: x + width, y2: y } },
+        { type: 'right', line: { x1: x + width, y1: y, x2: x + width, y2: y + height } },
+        { type: 'bottom', line: { x1: x, y1: y + height, x2: x + width, y2: y + height } },
+        { type: 'left', line: { x1: x, y1: y, x2: x, y2: y + height } }
+      ];
+
+      for (const edge of edges) {
+        if (pointToLineDistance(mousePos, edge.line) < EDGE_DETECTION_TOLERANCE) {
+          return { areaIndex: i, edgeType: edge.type };
+        }
       }
     }
     return null;
@@ -584,14 +653,14 @@ class ImageProcessorApp {
 
   _handleMouseDown(e) {
     const mousePos = this._getMousePos(e).image;
-    if (this.state.finalRect) {
-      this.state.selectedCorner = this._findClosestCorner(mousePos);
-      if (this.state.selectedCorner) {
+    if (this.state.finalRects.length > 0) {
+      this.state.selectedCornerInfo = this._findClosestCorner(mousePos);
+      if (this.state.selectedCornerInfo) {
         this.state.isDragging = true;
       }
-    } else if (this.state.transparentRect) {
-      this.state.selectedEdge = this._findClosestEdge(mousePos);
-      if (this.state.selectedEdge) {
+    } else if (this.state.transparentRects.length > 0) {
+      this.state.selectedEdgeInfo = this._findClosestEdge(mousePos);
+      if (this.state.selectedEdgeInfo) {
         this.state.isDragging = true;
         this.state.originalMousePos = mousePos;
         this.state.isTransparentAreaModified = true;
@@ -604,18 +673,19 @@ class ImageProcessorApp {
     let cursorStyle = 'default';
 
     if (this.state.isDragging) {
-      if (this.state.selectedCorner) {
-        this.state.selectedCorner.x = mousePos.x;
-        this.state.selectedCorner.y = mousePos.y;
+      if (this.state.selectedCornerInfo) {
+        const { areaIndex, cornerIndex } = this.state.selectedCornerInfo;
+        this.state.cornerSets[areaIndex][cornerIndex].x = mousePos.x;
+        this.state.cornerSets[areaIndex][cornerIndex].y = mousePos.y;
         this._drawCorners();
-      } else if (this.state.selectedEdge) {
+      } else if (this.state.selectedEdgeInfo) {
         this._dragTransparentRectEdge(mousePos);
       }
     } else {
       // Handle hover effects
-      if (this.state.finalRect) {
+      if (this.state.finalRects.length > 0) {
         if (this._findClosestCorner(mousePos)) cursorStyle = 'pointer';
-      } else if (this.state.transparentRect) {
+      } else if (this.state.transparentRects.length > 0) {
         if (this._findClosestEdge(mousePos)) cursorStyle = 'move';
       }
     }
@@ -625,21 +695,23 @@ class ImageProcessorApp {
   _dragTransparentRectEdge(mousePos) {
     const dx = mousePos.x - this.state.originalMousePos.x;
     const dy = mousePos.y - this.state.originalMousePos.y;
+    const { areaIndex, edgeType } = this.state.selectedEdgeInfo;
+    const rect = this.state.transparentRects[areaIndex];
 
-    switch (this.state.selectedEdge) {
+    switch (edgeType) {
       case 'left':
-        this.state.transparentRect.width -= dx;
-        this.state.transparentRect.x += dx;
+        rect.width -= dx;
+        rect.x += dx;
         break;
       case 'right':
-        this.state.transparentRect.width = mousePos.x - this.state.transparentRect.x;
+        rect.width = mousePos.x - rect.x;
         break;
       case 'top':
-        this.state.transparentRect.height -= dy;
-        this.state.transparentRect.y += dy;
+        rect.height -= dy;
+        rect.y += dy;
         break;
       case 'bottom':
-        this.state.transparentRect.height = mousePos.y - this.state.transparentRect.y;
+        rect.height = mousePos.y - rect.y;
         break;
     }
     this.state.originalMousePos = mousePos;
@@ -648,20 +720,21 @@ class ImageProcessorApp {
 
   _resetMouseState() {
     this.state.isDragging = false;
-    this.state.selectedCorner = null;
-    this.state.selectedEdge = null;
+    this.state.selectedCornerInfo = null;
+    this.state.selectedEdgeInfo = null;
     this.state.originalMousePos = null;
   }
 
   _updateRectWithTransforms() {
-    if (!this.transform.originalRect || !this.state.finalRect) return;
+    if (this.transform.originalRects.length !== 1 || !this.state.finalRects.length === 0) return;
 
+    const originalRect = this.transform.originalRects[0];
     const center = {
-      x: this.transform.originalRect.x + this.transform.originalRect.width / 2,
-      y: this.transform.originalRect.y + this.transform.originalRect.height / 2
+      x: originalRect.x + originalRect.width / 2,
+      y: originalRect.y + originalRect.height / 2
     };
 
-    const o = this.transform.originalRect;
+    const o = originalRect;
     const originalCorners = [
       { x: o.x, y: o.y },
       { x: o.x + o.width, y: o.y },
@@ -669,7 +742,7 @@ class ImageProcessorApp {
       { x: o.x, y: o.y + o.height },
     ];
 
-    this.state.corners = originalCorners.map(corner => {
+    this.state.cornerSets[0] = originalCorners.map(corner => {
       const rotated = rotatePoint(corner, center, this.transform.rotation);
       return scalePoint(rotated, center, this.transform.scale);
     });
@@ -678,113 +751,121 @@ class ImageProcessorApp {
   }
 
   _updateInfoPanels() {
-    if (!this.state.finalRect || !this.selectedImage) return;
-    const rect = this.state.finalRect;
+    if (this.state.finalRects.length === 0 || !this.selectedImage) return;
     const img = this.selectedImage;
 
-    const poInfoText = `
-            "x": ${toFloat(rect.x / img.width, 4)}, 
-            "y": ${toFloat(rect.y / img.height, 4)}, 
-            "w": ${toFloat(rect.width / img.width, 4)}, 
-            "h": ${toFloat(rect.height / img.height, 4)}
-        `;
-    this.elements.poInfo.querySelector('.info-content').textContent = poInfoText;
+    const poInfos = this.state.finalRects.map(rect => ({
+      x: toFloat(rect.x / img.width, 4),
+      y: toFloat(rect.y / img.height, 4),
+      w: toFloat(rect.width / img.width, 4),
+      h: toFloat(rect.height / img.height, 4)
+    }));
 
-    const templateInfoText = `
-            "width": ${img.width}, 
-            "height": ${img.height}, 
-            "left": ${Math.round(rect.x)}, 
-            "top": ${Math.round(rect.y)}, 
-            "right": ${Math.round(rect.x + rect.width)}, 
-            "bottom": ${Math.round(rect.y + rect.height)}
-        `;
-    this.elements.templateInfo.querySelector('.info-content').textContent = templateInfoText;
+    const templateInfos = this.state.finalRects.map(rect => ({
+      width: img.width,
+      height: img.height,
+      left: Math.round(rect.x),
+      top: Math.round(rect.y),
+      right: Math.round(rect.x + rect.width),
+      bottom: Math.round(rect.y + rect.height)
+    }));
 
-    // After confirmation, the final rect becomes the base for the interactive corners
-    this.state.corners = [
-      { x: rect.x, y: rect.y },
-      { x: rect.x + rect.width, y: rect.y },
-      { x: rect.x + rect.width, y: rect.y + rect.height },
-      { x: rect.x, y: rect.y + rect.height }
-    ];
+    this.elements.poInfo.querySelector('.info-content').textContent = JSON.stringify(poInfos, null, 4);
+    this.elements.templateInfo.querySelector('.info-content').textContent = JSON.stringify(templateInfos, null, 4);
   }
 
   _calculateAndDisplayMargins() {
-    if (!this.state.corners || this.state.corners.length !== 4 || !this.transform.originalRect) {
+    if (!this.state.cornerSets || this.state.cornerSets.length === 0 || this.transform.originalRects.length === 0) {
       alert('Please process an image and confirm the selection first!');
       return;
     }
-
-    const o = this.transform.originalRect;
-    const originalCorners = [
-      { x: o.x, y: o.y },
-      { x: o.x + o.width, y: o.y },
-      { x: o.x + o.width, y: o.y + o.height },
-      { x: o.x, y: o.y + o.height },
-    ];
-
-    const offsets = this.state.corners.map((corner, index) => {
-      const originalCorner = originalCorners[index];
-      // Use a small tolerance to avoid floating point inaccuracies creating tiny margins
-      return {
-        x: Math.abs(corner.x - originalCorner.x) > 0.1 ? Math.round(corner.x - originalCorner.x) : 0,
-        y: Math.abs(corner.y - originalCorner.y) > 0.1 ? Math.round(corner.y - originalCorner.y) : 0
-      };
-    });
-
-    const hasNonZeroOffsets = offsets.some(offset => offset.x !== 0 || offset.y !== 0);
     const { width, height } = this.selectedImage;
 
-    const poMarginInfo = hasNonZeroOffsets ? `"margins": [
-            ${toFloat(offsets[0].x / width)}, ${toFloat(offsets[0].y / height)}, 
-            ${toFloat(offsets[1].x / width)}, ${toFloat(offsets[1].y / height)}, 
-            ${toFloat(offsets[2].x / width)}, ${toFloat(offsets[2].y / height)}, 
-            ${toFloat(offsets[3].x / width)}, ${toFloat(offsets[3].y / height)}
-        ]` : null;
+    // Create a full representation of all areas' data first
+    const allAreasData = this.state.cornerSets.map((corners, areaIndex) => {
+      const originalRect = this.transform.originalRects[areaIndex];
+      const originalCorners = [
+        { x: originalRect.x, y: originalRect.y },
+        { x: originalRect.x + originalRect.width, y: originalRect.y },
+        { x: originalRect.x + originalRect.width, y: originalRect.y + originalRect.height },
+        { x: originalRect.x, y: originalRect.y + originalRect.height },
+      ];
 
-    const templateMarginInfo = hasNonZeroOffsets ? `"margins": [
-            ${offsets[0].x}, ${offsets[0].y}, 
-            ${offsets[1].x}, ${offsets[1].y}, 
-            ${offsets[2].x}, ${offsets[2].y}, 
-            ${offsets[3].x}, ${offsets[3].y}
-        ]` : null;
+      const offsets = corners.map((corner, index) => {
+        const originalCorner = originalCorners[index];
+        return {
+          x: Math.abs(corner.x - originalCorner.x) > 0.1 ? Math.round(corner.x - originalCorner.x) : 0,
+          y: Math.abs(corner.y - originalCorner.y) > 0.1 ? Math.round(corner.y - originalCorner.y) : 0
+        };
+      });
 
-    this._updateMarginInfo(this.elements.poInfo, poMarginInfo);
-    this._updateMarginInfo(this.elements.templateInfo, templateMarginInfo);
-    this._updatePositionsInfo(hasNonZeroOffsets);
+      const hasNonZeroOffsets = offsets.some(offset => offset.x !== 0 || offset.y !== 0);
+      const [tl, tr, br, bl] = corners;
+
+      const data = {
+        areaIndex,
+        hasOffsets: hasNonZeroOffsets,
+        positions: {
+          tlx: Math.round(tl.x), tly: Math.round(tl.y),
+          trx: Math.round(tr.x), try: Math.round(tr.y),
+          blx: Math.round(bl.x), bly: Math.round(bl.y),
+          brx: Math.round(br.x), bry: Math.round(br.y)
+        }
+      };
+
+      if (hasNonZeroOffsets) {
+        data.poMargin = [
+          toFloat(offsets[0].x / width), toFloat(offsets[0].y / height),
+          toFloat(offsets[1].x / width), toFloat(offsets[1].y / height),
+          toFloat(offsets[2].x / width), toFloat(offsets[2].y / height),
+          toFloat(offsets[3].x / width), toFloat(offsets[3].y / height)
+        ];
+        data.templateMargin = [
+          offsets[0].x, offsets[0].y,
+          offsets[1].x, offsets[1].y,
+          offsets[2].x, offsets[2].y,
+          offsets[3].x, offsets[3].y
+        ];
+      }
+      return data;
+    });
+
+    // Handle potential parsing errors if content is not valid JSON
+    let poContent, templateContent;
+    try {
+      poContent = JSON.parse(this.elements.poInfo.querySelector('.info-content').textContent);
+      templateContent = JSON.parse(this.elements.templateInfo.querySelector('.info-content').textContent);
+    } catch (e) {
+      console.error("Failed to parse info content JSON", e);
+      return; // Or handle error appropriately
+    }
+
+    allAreasData.forEach(data => {
+      if (data.hasOffsets) {
+        poContent[data.areaIndex].margins = data.poMargin;
+        templateContent[data.areaIndex].margins = data.templateMargin;
+      }
+    });
+
+    const formatJSON = (obj) => JSON.stringify(obj, null, 4);
+    this.elements.poInfo.querySelector('.info-content').textContent = formatJSON(poContent);
+    this.elements.templateInfo.querySelector('.info-content').textContent = formatJSON(templateContent);
+
+    // Update Positions info with all areas
+    const allPositions = allAreasData.map(d => d.positions);
+    this.elements.positionsInfo.querySelector('.info-content').textContent = formatJSON(allPositions);
+    this.elements.positionsInfo.style.display = 'block';
   }
 
-  _updatePositionsInfo(hasNonZeroOffsets) {
-    let positionsJson = null;
-    if (hasNonZeroOffsets) {
-      const [tl, tr, br, bl] = this.state.corners;
-      positionsJson = `"tlx": ${Math.round(tl.x)}, "tly": ${Math.round(tl.y)}, "trx": ${Math.round(tr.x)}, "try": ${Math.round(tr.y)}, "blx": ${Math.round(bl.x)}, "bly": ${Math.round(bl.y)}, "brx": ${Math.round(br.x)}, "bry": ${Math.round(br.y)}`.trim();
-    }
-
-    const positionsInfoElement = this.elements.positionsInfo;
-    const contentElement = positionsInfoElement.querySelector('.info-content');
-
-    if (positionsJson) {
-      contentElement.textContent = `{ ${positionsJson} }`;
-      positionsInfoElement.style.display = 'block';
-    } else {
-      contentElement.textContent = '';
-      positionsInfoElement.style.display = 'none';
-    }
-  }
-
-  _updateMarginInfo(infoElement, marginJson) {
-    const contentElement = infoElement.querySelector('.info-content');
-    let currentText = contentElement.textContent;
-
-    // A robust way to remove existing margins, if they exist.
-    currentText = currentText.replace(/,\s*"margins":\s*\[[^\]]*\]/, '');
-
-    if (marginJson) {
-      contentElement.textContent = currentText.trimEnd() + `, ${marginJson}`;
-    } else {
-      contentElement.textContent = currentText;
-    }
+  _updateSliderValuePosition(slider, output) {
+    const min = parseFloat(slider.min);
+    const max = parseFloat(slider.max);
+    const value = parseFloat(slider.value);
+    const percent = (value - min) / (max - min);
+    const sliderWidth = slider.offsetWidth;
+    const thumbWidth = 12; // Approximate thumb width in pixels
+    const newPosition = percent * (sliderWidth - thumbWidth);
+    output.style.left = `${newPosition + (thumbWidth / 2)}px`;
   }
 }
 
