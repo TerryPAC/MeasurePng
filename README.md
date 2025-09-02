@@ -106,6 +106,7 @@ This shows the final absolute pixel coordinates for each of the four corners of 
 ### Samples
 ![Sample Image](assets/sample1.jpg)
 ![Sample Image](assets/sample2.jpg)
+![Sample Image](assets/sample3.jpg)
 
 ## Notes
 
