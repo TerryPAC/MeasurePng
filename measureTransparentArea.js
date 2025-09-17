@@ -244,6 +244,13 @@ class ImageProcessorApp {
       return;
     }
 
+    // Reset state from confirmation step
+    this.state.finalRects = [];
+    this.state.cornerSets = [];
+    this.interactiveCtx.clearRect(0, 0, this.elements.interactiveCanvas.width, this.elements.interactiveCanvas.height);
+    this.elements.transformControls.style.display = 'none';
+    this.elements.calculateMarginsButton.style.visibility = 'hidden';
+
     this.state.transparentRects = this._detectTransparentArea(this.selectedImage);
     this._setupCanvases();
     this._drawResult();
