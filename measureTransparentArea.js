@@ -5,6 +5,7 @@ const CORNER_DETECTION_RADIUS = 15; // Px radius to detect mouse hover over a co
 const EDGE_DETECTION_TOLERANCE = 10; // Px distance to detect mouse hover over an edge
 const CHECKERBOARD_TILE_SIZE = 2; // Px size for the canvas background checkerboard tiles
 const MIN_AREA_PIXELS = 100; // Minimum pixel count for a transparent area
+const MIN_AREA_WIDTH = 50; // Minimum pixel width for a transparent area
 
 // Utility functions
 const toFloat = (value, precision = 6) => parseFloat(value.toFixed(precision));
@@ -329,7 +330,9 @@ class ImageProcessorApp {
         const index = y * canvas.width + x;
         if (!visited[index] && data[index * 4 + 3] < ALPHA_THRESHOLD) {
           const area = floodFill(x, y);
-          if (area.pixels > MIN_AREA_PIXELS) {
+          if (area.pixels > MIN_AREA_PIXELS
+            && area.maxX - area.minX > MIN_AREA_WIDTH
+            && area.maxY - area.minY > MIN_AREA_WIDTH) {
             areas.push(area);
           }
         }
