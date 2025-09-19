@@ -218,6 +218,8 @@ class ImageProcessorApp {
       try {
         this.selectedImage = await this._loadImage(file);
         this._resetAppState();
+        this._setupCanvases();
+        this._drawResult();
       } catch (error) {
         console.error('Image loading failed:', error);
         alert('Failed to load image.');
@@ -251,6 +253,10 @@ class ImageProcessorApp {
     this.interactiveCtx.clearRect(0, 0, this.elements.interactiveCanvas.width, this.elements.interactiveCanvas.height);
     this.elements.transformControls.style.display = 'none';
     this.elements.calculateMarginsButton.style.visibility = 'hidden';
+    this.elements.poInfo.querySelector('.info-content').textContent = '';
+    this.elements.templateInfo.querySelector('.info-content').textContent = '';
+    this.elements.positionsInfo.querySelector('.info-content').textContent = '';
+    this.elements.positionsInfo.style.display = 'none';
 
     this.state.transparentRects = this._detectTransparentArea(this.selectedImage);
     this._setupCanvases();
@@ -280,7 +286,14 @@ class ImageProcessorApp {
   _calculateCanvasScale(imageWidth, imageHeight, containerWidth, containerHeight) {
     const scaleX = containerWidth / imageWidth;
     const scaleY = containerHeight / imageHeight;
-    return Math.min(scaleX, scaleY, 1);
+    return Math.min(scaleX, scaleY);
+  }
+
+  _isAreaContained(containerArea, containedArea) {
+    return containerArea.minX <= containedArea.minX &&
+      containerArea.minY <= containedArea.minY &&
+      containerArea.maxX >= containedArea.maxX &&
+      containerArea.maxY >= containedArea.maxY;
   }
 
   _detectTransparentArea(img) {
@@ -293,7 +306,7 @@ class ImageProcessorApp {
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
     const visited = new Array(canvas.width * canvas.height).fill(false);
-    const areas = [];
+    let areas = [];
 
     const floodFill = (startX, startY) => {
       const area = { minX: startX, minY: startY, maxX: startX, maxY: startY, pixels: 0 };
@@ -347,6 +360,11 @@ class ImageProcessorApp {
         width: img.width - fallbackMargin * 2,
         height: img.height - fallbackMargin * 2,
       }];
+    }
+
+    if (areas.length > 1) {
+      const largestArea = areas.reduce((max, item) => item.pixels > max.pixels ? item : max, areas[0]);
+      areas = areas.filter(area => area === largestArea || !this._isAreaContained(largestArea, area));
     }
 
     areas.sort((a, b) => b.pixels - a.pixels);
