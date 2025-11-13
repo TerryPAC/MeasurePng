@@ -381,27 +381,30 @@ class ImageProcessorApp {
     if (this.state.transparentRects.length === 0) return;
 
     const isMultiArea = this.state.transparentRects.length > 1;
+    const productWidth = parseFloat(this.elements.productWidthInput.value) || 1;
+    const productHeight = parseFloat(this.elements.productHeightInput.value) || 1;
+    const hasProductDimensions = this.elements.productWidthInput.value && this.elements.productHeightInput.value;
 
-    if (isMultiArea) {
-      this.state.finalRects = this.state.transparentRects.map(rect => ({ ...rect }));
-      this.transform.originalRects = this.state.transparentRects.map(rect => ({ ...rect }));
-      this.elements.transformControls.style.display = 'none';
-    } else {
-      const productWidth = parseFloat(this.elements.productWidthInput.value) || 1;
-      const productHeight = parseFloat(this.elements.productHeightInput.value) || 1;
-      const transparentRect = this.state.transparentRects[0];
-      const aspectRatio = this.elements.productWidthInput.value && this.elements.productHeightInput.value
-        ? productWidth / productHeight
-        : transparentRect.width / transparentRect.height;
-
+    if (hasProductDimensions) {
+      const aspectRatio = productWidth / productHeight;
       const bleed = parseFloat(this.elements.bleedInput.value) || 0;
       const bleedRatio = bleed / productWidth;
       const alignment = this.elements.alignmentControl?.value || 'center';
 
-      this.state.finalRects = [this._calculateAspectRatioRect(transparentRect, aspectRatio, bleedRatio, alignment)];
-      this.transform.originalRects = [{ ...this.state.finalRects[0] }];
-      this.elements.transformControls.style.display = 'block';
+      this.state.finalRects = this.state.transparentRects.map(transparentRect =>
+        this._calculateAspectRatioRect(transparentRect, aspectRatio, bleedRatio, alignment)
+      );
+    } else {
+      // If no product dimensions are provided, use the transparent rects as they are.
+      this.state.finalRects = this.state.transparentRects.map(rect => ({ ...rect }));
+    }
 
+    this.transform.originalRects = this.state.finalRects.map(rect => ({ ...rect }));
+
+    if (isMultiArea) {
+      this.elements.transformControls.style.display = 'none';
+    } else {
+      this.elements.transformControls.style.display = 'block';
       // Update slider value positions after they become visible
       this._updateSliderValuePosition(this.elements.rotationControl, this.elements.rotationValue);
       this._updateSliderValuePosition(this.elements.scaleControl, this.elements.scaleValue);
@@ -798,8 +801,11 @@ class ImageProcessorApp {
       bottom: Math.round(rect.y + rect.height)
     }));
 
-    this.elements.poInfo.querySelector('.info-content').textContent = JSON.stringify(poInfos, null, 4);
-    this.elements.templateInfo.querySelector('.info-content').textContent = JSON.stringify(templateInfos, null, 4);
+    const poOutput = poInfos.length === 1 ? poInfos[0] : poInfos;
+    const templateOutput = templateInfos.length === 1 ? templateInfos[0] : templateInfos;
+
+    this.elements.poInfo.querySelector('.info-content').textContent = JSON.stringify(poOutput, null, 4);
+    this.elements.templateInfo.querySelector('.info-content').textContent = JSON.stringify(templateOutput, null, 4);
   }
 
   _calculateAndDisplayMargins() {
@@ -881,7 +887,8 @@ class ImageProcessorApp {
 
     // Update Positions info with all areas
     const allPositions = allAreasData.map(d => d.positions);
-    this.elements.positionsInfo.querySelector('.info-content').textContent = formatJSON(allPositions);
+    const positionsOutput = allPositions.length === 1 ? allPositions[0] : allPositions;
+    this.elements.positionsInfo.querySelector('.info-content').textContent = formatJSON(positionsOutput);
     this.elements.positionsInfo.style.display = 'block';
   }
 
