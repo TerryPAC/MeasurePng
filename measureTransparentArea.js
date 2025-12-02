@@ -3,7 +3,7 @@ const ALPHA_THRESHOLD = 192; // Alpha value threshold to determine transparency
 const IMAGE_BORDER_OFFSET = 10; // Px offset from image edges to start transparency detection
 const CORNER_DETECTION_RADIUS = 15; // Px radius to detect mouse hover over a corner
 const EDGE_DETECTION_TOLERANCE = 10; // Px distance to detect mouse hover over an edge
-const CHECKERBOARD_TILE_SIZE = 2; // Px size for the canvas background checkerboard tiles
+const CHECKERBOARD_TILE_SIZE = 5; // Px size for the canvas background checkerboard tiles
 const MIN_AREA_PIXELS = 100; // Minimum pixel count for a transparent area
 const MIN_AREA_WIDTH = 50; // Minimum pixel width for a transparent area
 
@@ -97,6 +97,9 @@ class ImageProcessorApp {
       originalMousePos: null,
       canvasOffset: { x: 0, y: 0 },
     };
+
+    this.rafId = null;
+    this.backgroundCanvas = document.createElement('canvas');
 
     this.transform = {
       rotation: 0,
@@ -281,6 +284,19 @@ class ImageProcessorApp {
       canvas.style.width = `${canvasWidth * scale}px`;
       canvas.style.height = `${canvasHeight * scale}px`;
     });
+
+    // Setup background canvas
+    this.backgroundCanvas.width = canvasWidth;
+    this.backgroundCanvas.height = canvasHeight;
+    const bgCtx = this.backgroundCanvas.getContext('2d');
+    
+    // Draw checkerboard to backgroundCanvas
+    for (let y = 0; y < canvasHeight; y += CHECKERBOARD_TILE_SIZE) {
+      for (let x = 0; x < canvasWidth; x += CHECKERBOARD_TILE_SIZE) {
+        bgCtx.fillStyle = ((x / CHECKERBOARD_TILE_SIZE) + (y / CHECKERBOARD_TILE_SIZE)) % 2 === 0 ? '#ffffff' : '#e0e0e0';
+        bgCtx.fillRect(x, y, CHECKERBOARD_TILE_SIZE, CHECKERBOARD_TILE_SIZE);
+      }
+    }
   }
 
   _calculateCanvasScale(imageWidth, imageHeight, containerWidth, containerHeight) {
@@ -492,13 +508,8 @@ class ImageProcessorApp {
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw checkerboard background
-    for (let y = 0; y < canvas.height; y += CHECKERBOARD_TILE_SIZE) {
-      for (let x = 0; x < canvas.width; x += CHECKERBOARD_TILE_SIZE) {
-        ctx.fillStyle = ((x / CHECKERBOARD_TILE_SIZE) + (y / CHECKERBOARD_TILE_SIZE)) % 2 === 0 ? '#ffffff' : '#e0e0e0';
-        ctx.fillRect(x, y, CHECKERBOARD_TILE_SIZE, CHECKERBOARD_TILE_SIZE);
-      }
-    }
+    // Draw cached background
+    ctx.drawImage(this.backgroundCanvas, 0, 0);
 
     // Draw original image
     ctx.drawImage(img, offsetX, offsetY);
@@ -700,6 +711,19 @@ class ImageProcessorApp {
   }
 
   _handleMouseMove(e) {
+    const { clientX, clientY } = e;
+    
+    if (this.rafId) {
+      cancelAnimationFrame(this.rafId);
+    }
+
+    this.rafId = requestAnimationFrame(() => {
+      this._processMouseMove({ clientX, clientY });
+      this.rafId = null;
+    });
+  }
+
+  _processMouseMove(e) {
     const mousePos = this._getMousePos(e).image;
     let cursorStyle = 'default';
 
@@ -757,7 +781,7 @@ class ImageProcessorApp {
   }
 
   _updateRectWithTransforms() {
-    if (this.transform.originalRects.length !== 1 || !this.state.finalRects.length === 0) return;
+    if (this.transform.originalRects.length !== 1 || this.state.finalRects.length === 0) return;
 
     const originalRect = this.transform.originalRects[0];
     const center = {
