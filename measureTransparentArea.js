@@ -876,8 +876,14 @@ class ImageProcessorApp {
 
     allAreasData.forEach(data => {
       if (data.hasOffsets) {
-        poContent[data.areaIndex].margins = data.poMargin;
-        templateContent[data.areaIndex].margins = data.templateMargin;
+        if (Array.isArray(poContent)) {
+          poContent[data.areaIndex].margins = data.poMargin;
+          templateContent[data.areaIndex].margins = data.templateMargin;
+        } else {
+          // Single object case (when there is only one slot)
+          poContent.margins = data.poMargin;
+          templateContent.margins = data.templateMargin;
+        }
       }
     });
 
