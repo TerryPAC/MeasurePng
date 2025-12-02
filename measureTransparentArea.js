@@ -1,5 +1,5 @@
 // Constants
-const ALPHA_THRESHOLD = 192; // Alpha value threshold to determine transparency
+// ALPHA_THRESHOLD is now dynamic, controlled by UI
 const IMAGE_BORDER_OFFSET = 10; // Px offset from image edges to start transparency detection
 const CORNER_DETECTION_RADIUS = 15; // Px radius to detect mouse hover over a corner
 const EDGE_DETECTION_TOLERANCE = 10; // Px distance to detect mouse hover over an edge
@@ -82,6 +82,8 @@ class ImageProcessorApp {
       rotationValue: document.getElementById('rotationValue'),
       scaleValue: document.getElementById('scaleValue'),
       canvasScaleControl: document.getElementById('canvasScaleControl'),
+      alphaThresholdControl: document.getElementById('alphaThresholdControl'),
+      alphaThresholdValue: document.getElementById('alphaThresholdValue'),
     };
     this.interactiveCtx = this.elements.interactiveCanvas.getContext('2d');
     this.selectedImage = null;
@@ -146,6 +148,19 @@ class ImageProcessorApp {
     this.elements.verticalGuidesInput.addEventListener('input', () => this._drawCorners());
 
     this.elements.canvasScaleControl.addEventListener('input', (e) => this._handleCanvasScaleChange(e));
+
+    this.elements.alphaThresholdControl.addEventListener('input', (e) => {
+      const slider = e.target;
+      const output = this.elements.alphaThresholdValue;
+      output.textContent = slider.value;
+      this._updateSliderValuePosition(slider, output);
+    });
+
+    // Initialize slider position
+    this._updateSliderValuePosition(
+      this.elements.alphaThresholdControl,
+      this.elements.alphaThresholdValue
+    );
 
     document.querySelectorAll('.copy-button').forEach(button => {
       button.addEventListener('click', async () => {
@@ -313,6 +328,7 @@ class ImageProcessorApp {
   }
 
   _detectTransparentArea(img) {
+    const alphaThreshold = parseInt(this.elements.alphaThresholdControl.value, 10);
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     canvas.width = img.width;
@@ -337,7 +353,7 @@ class ImageProcessorApp {
           continue;
         }
 
-        if (data[(y * canvas.width + x) * 4 + 3] >= ALPHA_THRESHOLD) {
+        if (data[(y * canvas.width + x) * 4 + 3] >= alphaThreshold) {
           visited[index] = true;
           continue;
         }
@@ -357,7 +373,7 @@ class ImageProcessorApp {
     for (let y = IMAGE_BORDER_OFFSET; y < canvas.height - IMAGE_BORDER_OFFSET; y++) {
       for (let x = IMAGE_BORDER_OFFSET; x < canvas.width - IMAGE_BORDER_OFFSET; x++) {
         const index = y * canvas.width + x;
-        if (!visited[index] && data[index * 4 + 3] < ALPHA_THRESHOLD) {
+        if (!visited[index] && data[index * 4 + 3] < alphaThreshold) {
           const area = floodFill(x, y);
           if (area.pixels > MIN_AREA_PIXELS
             && area.maxX - area.minX > MIN_AREA_WIDTH
@@ -930,7 +946,7 @@ class ImageProcessorApp {
     const sliderWidth = slider.offsetWidth;
     const thumbWidth = 12; // Approximate thumb width in pixels
     const newPosition = percent * (sliderWidth - thumbWidth);
-    output.style.left = `${newPosition + (thumbWidth / 2)}px`;
+    output.style.left = `${slider.offsetLeft + newPosition + (thumbWidth / 2)}px`;
   }
 }
 

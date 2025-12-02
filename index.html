@@ -246,7 +246,8 @@
         .slider-container {
             display: flex;
             align-items: center;
-            margin-bottom: 15px;
+            margin-bottom: 12px;
+            position: relative;
         }
 
         .slider-container:last-child {
@@ -270,12 +271,13 @@
         .control-row .slider-container label {
             width: 100%;
             margin-bottom: 5px;
+            text-align: left; /* Reset alignment for top/bottom labels */
         }
         
         .slider-container output {
             position: absolute;
-            bottom: 0;
-            left: 50%;
+            top: 100%;
+            left: 0;
             transform: translateX(-50%);
             background: #4CAF50;
             color: white;
@@ -286,6 +288,8 @@
             text-align: center;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
             pointer-events: none;
+            margin-top: 4px;
+            z-index: 10;
         }
 
         .slider-container label {
@@ -294,6 +298,9 @@
             color: #555;
             margin-right: 10px;
             white-space: nowrap;
+            width: 100px; /* Fixed width for alignment */
+            flex-shrink: 0; /* Prevent shrinking */
+            text-align: right; /* Optional: align text to right */
         }
 
         input[type="range"] {
@@ -454,6 +461,11 @@
                 <div class="slider-container">
                     <label>Canvas Scale</label>
                     <input type="range" id="canvasScaleControl" min="1" max="2" value="1" step="0.01">
+                </div>
+                <div class="slider-container">
+                    <label for="alphaThresholdControl">Alpha Threshold</label>
+                    <input type="range" id="alphaThresholdControl" min="1" max="255" value="192" step="1">
+                    <output id="alphaThresholdValue">192</output>
                 </div>
             </div>
 
