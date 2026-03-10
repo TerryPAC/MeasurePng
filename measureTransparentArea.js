@@ -399,7 +399,12 @@ class ImageProcessorApp {
       areas = areas.filter(area => area === largestArea || !this._isAreaContained(largestArea, area));
     }
 
-    areas.sort((a, b) => b.pixels - a.pixels);
+    areas.sort((a, b) => {
+      if (Math.abs(a.minY - b.minY) > 5) {
+        return a.minY - b.minY;
+      }
+      return a.minX - b.minX;
+    });
 
     return areas.map(area => ({
       x: area.minX - 1,
