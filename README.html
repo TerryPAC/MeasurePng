@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PNG Transparent Area Measurement Tool - Documentation</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown.min.css">
+    <style>
+        body {
+            box-sizing: border-box;
+            min-width: 200px;
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 45px;
+        }
+        @media (max-width: 767px) {
+            body {
+                padding: 15px;
+            }
+        }
+        .mermaid {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="markdown-body">
+    <h1>PNG Transparent Area Measurement Tool</h1>
+    <p>A web-based tool for measuring transparent areas in images, defining printable areas, and calculating custom margins. This tool helps designers and developers accurately set up print files.</p>
+
+    <h2>Features</h2>
+    <ul>
+        <li>Upload PNG, JPEG, or WEBP images.</li>
+        <li>Automatic detection of one or more transparent areas.</li>
+        <li>Manual adjustment of detected transparent areas by dragging their edges.</li>
+        <li>Define a printable area based on product aspect ratio and bleed values.</li>
+        <li>Align the printable area (center, top, bottom, left, right).</li>
+        <li>For single printable areas, apply rotation and scaling.</li>
+        <li>Interactively adjust the final print area by dragging its corners to create custom margins.</li>
+        <li>Add customizable vertical and horizontal guide lines for precise alignment.</li>
+        <li>Zoom in and out of the canvas for a more detailed view.</li>
+        <li>Real-time preview of all adjustments.</li>
+        <li>Generate normalized (PO) and pixel-based (Template) coordinates.</li>
+        <li>Calculate and display custom margins and final corner positions.</li>
+    </ul>
+
+    <h2>Workflow</h2>
+    <div class="mermaid">
+graph TD
+    A[Start] --> B[Upload Image]
+    B --> C[Set Parameters: Product Size, Bleed, Alignment]
+    C --> D[Click Start Detection]
+    D --> E{Automatic Detection}
+    E --> F[Adjust Detection Area Edges - Optional]
+    F --> G[Click Confirm Detection Area]
+    G --> H[Interactive Printable Area Generated]
+    H --> I{Single Area?}
+    I -- Yes --> J[Apply Rotation & Scale - Optional]
+    I -- No --> K[Adjust Corners for Custom Margins - Optional]
+    J --> K
+    K --> L[Click Calculate Margins]
+    L --> M[View/Copy PO, Template & Positions Info]
+    M --> N[End]
+    </div>
+
+    <h2>Usage</h2>
+    <ol>
+        <li><strong>Upload Image</strong>
+            <ul>
+                <li>Click the file input button.</li>
+                <li>Select a PNG, JPEG, or WEBP image.</li>
+                <li>The image will be displayed in the preview area.</li>
+            </ul>
+        </li>
+        <li><strong>Set Parameters</strong>
+            <ul>
+                <li>Enter <code>Product Width</code>, <code>Product Height</code>, and <code>Bleed</code>. These are used to calculate the aspect ratio of the printable area.</li>
+                <li>Select an <code>Alignment</code> for the printable area within the transparent area.</li>
+                <li>(Optional) Enter <code>Vertical Guides</code> and <code>Horizontal Guides</code> as comma-separated values between 0 and 1 (e.g., <code>0.25, 0.75</code>) to display guide lines. A center line is always shown.</li>
+            </ul>
+        </li>
+        <li><strong>Detect Transparent Area</strong>
+            <ul>
+                <li>Click the "Start Detection" button.</li>
+                <li>The tool will automatically detect transparent area(s).</li>
+                <li>A green rectangle will show the detected area(s).</li>
+            </ul>
+        </li>
+        <li><strong>Adjust Detection (Optional)</strong>
+            <ul>
+                <li>If the automatic detection needs adjustment, you can drag the edges of the green rectangle(s).</li>
+                <li>Click and drag any edge to modify a detection area.</li>
+            </ul>
+        </li>
+        <li><strong>Confirm Detection</strong>
+            <ul>
+                <li>Click the "Confirm Detection Area" button.</li>
+                <li>This generates the printable area based on your parameters.</li>
+                <li>An interactive magenta shape with adjustable corners will appear.</li>
+                <li>If a single area was detected, <code>Rotation</code> and <code>Scale</code> controls will also become available.</li>
+            </ul>
+        </li>
+        <li><strong>Adjust Printable Area (Optional)</strong>
+            <ul>
+                <li>Use the <code>Rotation</code> and <code>Scale</code> sliders to transform the printable area (single area only).</li>
+                <li>Drag the corners of the magenta shape to create custom margins. This works for single or multiple areas.</li>
+            </ul>
+        </li>
+        <li><strong>Calculate Margins</strong>
+            <ul>
+                <li>Click the "Calculate Margins" button.</li>
+                <li>The tool calculates any custom margins you created by adjusting the corners.</li>
+                <li>The <code>PO Info</code> and <code>Template Info</code> panels will be updated to include a <code>margins</code> array if adjustments were made.</li>
+                <li>The <code>Positions Info</code> panel will appear, showing the final pixel coordinates of the four corners of the printable area(s).</li>
+            </ul>
+        </li>
+    </ol>
+
+    <h2>Output Format</h2>
+    <h3>PO Info Format</h3>
+    <p>The <code>margins</code> array is optional and appears only after adjustment and calculation. It contains 8 values representing the x and y offsets for the top-left, top-right, bottom-right, and bottom-left corners, normalized to the image dimensions.</p>
+    <pre><code>[
+    {
+        "x": 0.1234,
+        "y": 0.5678,
+        "w": 0.4321,
+        "h": 0.8765,
+        "margins": [0.01, 0.02, -0.01, 0.025, -0.015, -0.02, 0.01, -0.025]
+    }
+]</code></pre>
+
+    <h3>Template Info Format</h3>
+    <p>The <code>margins</code> array is optional and contains 8 values representing the pixel offsets for the four corners.</p>
+    <pre><code>[
+    {
+        "width": 1000,
+        "height": 800,
+        "left": 123,
+        "top": 456,
+        "right": 555,
+        "bottom": 912,
+        "margins": [10, 20, -10, 25, -15, -20, 10, -25]
+    }
+]</code></pre>
+
+    <h3>Positions Info Format</h3>
+    <p>This shows the final absolute pixel coordinates for each of the four corners of the printable area(s).</p>
+    <pre><code>[
+    {
+        "tlx": 133,
+        "tly": 476,
+        "trx": 545,
+        "try": 481,
+        "blx": 113,
+        "bly": 892,
+        "brx": 540,
+        "bry": 887
+    }
+]</code></pre>
+
+    <h2>Notes</h2>
+    <ul>
+        <li>For best results with automatic detection, use images with clear, high-contrast transparent areas.</li>
+        <li>The bleed value should be entered in the same unit as the product dimensions.</li>
+        <li>All measurements are calculated relative to the image dimensions.</li>
+    </ul>
+
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true });
+    </script>
+</body>
+</html>

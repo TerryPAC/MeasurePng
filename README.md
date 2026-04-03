@@ -17,6 +17,26 @@ A web-based tool for measuring transparent areas in images, defining printable a
 - Generate normalized (PO) and pixel-based (Template) coordinates.
 - Calculate and display custom margins and final corner positions.
 
+## Workflow
+
+```mermaid
+graph TD
+    A[Start] --> B[Upload Image]
+    B --> C[Set Parameters: Product Size, Bleed, Alignment]
+    C --> D[Click Start Detection]
+    D --> E{Automatic Detection}
+    E --> F[Adjust Detection Area Edges - Optional]
+    F --> G[Click Confirm Detection Area]
+    G --> H[Interactive Printable Area Generated]
+    H --> I{Single Area?}
+    I -- Yes --> J[Apply Rotation & Scale - Optional]
+    I -- No --> K[Adjust Corners for Custom Margins - Optional]
+    J --> K
+    K --> L[Click Calculate Margins]
+    L --> M[View/Copy PO, Template & Positions Info]
+    M --> N[End]
+```
+
 ## Usage
 
 1.  **Upload Image**
