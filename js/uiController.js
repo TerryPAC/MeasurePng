@@ -1,64 +1,18 @@
-// Constants
-// ALPHA_THRESHOLD is now dynamic, controlled by UI
-const IMAGE_BORDER_OFFSET = 10; // Px offset from image edges to start transparency detection
-const CORNER_DETECTION_RADIUS = 15; // Px radius to detect mouse hover over a corner
-const EDGE_DETECTION_TOLERANCE = 10; // Px distance to detect mouse hover over an edge
-const CHECKERBOARD_TILE_SIZE = 5; // Px size for the canvas background checkerboard tiles
-const MIN_AREA_PIXELS = 100; // Minimum pixel count for a transparent area
-const MIN_AREA_WIDTH = 50; // Minimum pixel width for a transparent area
+import {
+  IMAGE_BORDER_OFFSET,
+  CORNER_DETECTION_RADIUS,
+  EDGE_DETECTION_TOLERANCE,
+  CHECKERBOARD_TILE_SIZE,
+} from './constants.js';
+import {
+  toFloat,
+  rotatePoint,
+  scalePoint,
+  pointToLineDistance
+} from './utils.js';
+import { detectTransparentArea } from './imageProcessor.js';
 
-// Utility functions
-const toFloat = (value, precision = 6) => parseFloat(value.toFixed(precision));
-
-const rotatePoint = (point, center, angle) => {
-  const rad = (angle * Math.PI) / 180;
-  const cos = Math.cos(rad);
-  const sin = Math.sin(rad);
-  const dx = point.x - center.x;
-  const dy = point.y - center.y;
-  return {
-    x: center.x + (dx * cos - dy * sin),
-    y: center.y + (dx * sin + dy * cos)
-  };
-};
-
-const scalePoint = (point, center, scale) => {
-  return {
-    x: center.x + (point.x - center.x) * scale,
-    y: center.y + (point.y - center.y) * scale
-  };
-};
-
-const pointToLineDistance = (point, line) => {
-  const A = point.x - line.x1;
-  const B = point.y - line.y1;
-  const C = line.x2 - line.x1;
-  const D = line.y2 - line.y1;
-
-  const dot = A * C + B * D;
-  const lenSq = C * C + D * D;
-  let param = lenSq !== 0 ? dot / lenSq : -1;
-
-  let xx, yy;
-
-  if (param < 0) {
-    xx = line.x1;
-    yy = line.y1;
-  } else if (param > 1) {
-    xx = line.x2;
-    yy = line.y2;
-  } else {
-    xx = line.x1 + param * C;
-    yy = line.y1 + param * D;
-  }
-
-  const dx = point.x - xx;
-  const dy = point.y - yy;
-
-  return Math.sqrt(dx * dx + dy * dy);
-};
-
-class ImageProcessorApp {
+export class ImageProcessorApp {
   constructor() {
     this.elements = {
       imageInput: document.getElementById('imageInput'),
@@ -276,7 +230,8 @@ class ImageProcessorApp {
     this.elements.positionsInfo.querySelector('.info-content').textContent = '';
     this.elements.positionsInfo.style.display = 'none';
 
-    this.state.transparentRects = this._detectTransparentArea(this.selectedImage);
+    const alphaThreshold = parseInt(this.elements.alphaThresholdControl.value, 10);
+    this.state.transparentRects = detectTransparentArea(this.selectedImage, alphaThreshold);
     this._setupCanvases();
     this._drawResult();
     this.elements.confirmButton.style.visibility = 'visible';
@@ -318,100 +273,6 @@ class ImageProcessorApp {
     const scaleX = containerWidth / imageWidth;
     const scaleY = containerHeight / imageHeight;
     return Math.min(scaleX, scaleY);
-  }
-
-  _isAreaContained(containerArea, containedArea) {
-    return containerArea.minX <= containedArea.minX &&
-      containerArea.minY <= containedArea.minY &&
-      containerArea.maxX >= containedArea.maxX &&
-      containerArea.maxY >= containedArea.maxY;
-  }
-
-  _detectTransparentArea(img) {
-    const alphaThreshold = parseInt(this.elements.alphaThresholdControl.value, 10);
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = img.width;
-    canvas.height = img.height;
-    ctx.drawImage(img, 0, 0);
-
-    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imageData.data;
-    const visited = new Array(canvas.width * canvas.height).fill(false);
-    let areas = [];
-
-    const floodFill = (startX, startY) => {
-      const area = { minX: startX, minY: startY, maxX: startX, maxY: startY, pixels: 0 };
-      const stack = [[startX, startY]];
-
-      while (stack.length > 0) {
-        const [x, y] = stack.pop();
-        const index = y * canvas.width + x;
-        if (x < IMAGE_BORDER_OFFSET || x >= canvas.width - IMAGE_BORDER_OFFSET ||
-          y < IMAGE_BORDER_OFFSET || y >= canvas.height - IMAGE_BORDER_OFFSET ||
-          visited[index]) {
-          continue;
-        }
-
-        if (data[(y * canvas.width + x) * 4 + 3] >= alphaThreshold) {
-          visited[index] = true;
-          continue;
-        }
-
-        visited[index] = true;
-        area.pixels++;
-        area.minX = Math.min(area.minX, x);
-        area.minY = Math.min(area.minY, y);
-        area.maxX = Math.max(area.maxX, x);
-        area.maxY = Math.max(area.maxY, y);
-
-        stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
-      }
-      return area;
-    };
-
-    for (let y = IMAGE_BORDER_OFFSET; y < canvas.height - IMAGE_BORDER_OFFSET; y++) {
-      for (let x = IMAGE_BORDER_OFFSET; x < canvas.width - IMAGE_BORDER_OFFSET; x++) {
-        const index = y * canvas.width + x;
-        if (!visited[index] && data[index * 4 + 3] < alphaThreshold) {
-          const area = floodFill(x, y);
-          if (area.pixels > MIN_AREA_PIXELS
-            && area.maxX - area.minX > MIN_AREA_WIDTH
-            && area.maxY - area.minY > MIN_AREA_WIDTH) {
-            areas.push(area);
-          }
-        }
-      }
-    }
-
-    if (areas.length === 0) {
-      const fallbackMargin = IMAGE_BORDER_OFFSET * 2;
-      return [{
-        x: fallbackMargin,
-        y: fallbackMargin,
-        width: img.width - fallbackMargin * 2,
-        height: img.height - fallbackMargin * 2,
-      }];
-    }
-
-    if (areas.length > 1) {
-      const largestArea = areas.reduce((max, item) => item.pixels > max.pixels ? item : max, areas[0]);
-      areas = areas.filter(area => area === largestArea || !this._isAreaContained(largestArea, area));
-    }
-
-    areas.sort((a, b) => {
-      if (Math.abs(a.minY - b.minY) > 5) {
-        return a.minY - b.minY;
-      }
-      return a.minX - b.minX;
-    });
-
-    return areas.map(area => ({
-      x: area.minX - 1,
-      y: area.minY - 1,
-      width: area.maxX - area.minX + 2,
-      height: area.maxY - area.minY + 2,
-    }));
   }
 
   _confirmSelection() {
@@ -635,15 +496,6 @@ class ImageProcessorApp {
     ctx.strokeStyle = originalStrokeStyle;
     ctx.lineWidth = originalLineWidth;
     ctx.setLineDash(originalLineDash); // Reset line dash
-  }
-
-  _drawGuideLines(ctx, offsetX, offsetY) {
-    // This method is now a wrapper that calls the new method for each corner set.
-    // It's kept for potential partial refactors, but the main logic is moved.
-    // The main call from _drawCorners is now directly to _drawGuideLinesForCorners.
-    this.state.cornerSets.forEach(corners => {
-      this._drawGuideLinesForCorners(ctx, offsetX, offsetY, corners);
-    });
   }
 
   _parseGuideValues(inputValue) {
@@ -954,9 +806,3 @@ class ImageProcessorApp {
     output.style.left = `${slider.offsetLeft + newPosition + (thumbWidth / 2)}px`;
   }
 }
-
-// Initialize event listeners
-document.addEventListener('DOMContentLoaded', () => {
-  const app = new ImageProcessorApp();
-  app.init();
-});
