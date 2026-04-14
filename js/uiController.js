@@ -276,6 +276,7 @@ export class ImageProcessorApp {
   }
 
   _confirmSelection() {
+    console.log('[MeasurePng] confirmSelection called, rects:', this.state.transparentRects.length);
     if (this.state.transparentRects.length === 0) return;
 
     const isMultiArea = this.state.transparentRects.length > 1;
@@ -316,12 +317,18 @@ export class ImageProcessorApp {
   }
 
   _initializeCorners() {
-    this.state.cornerSets = this.state.finalRects.map(rect => [
-      { x: rect.x, y: rect.y },
-      { x: rect.x + rect.width, y: rect.y },
-      { x: rect.x + rect.width, y: rect.y + rect.height },
-      { x: rect.x, y: rect.y + rect.height },
-    ]);
+    this.state.cornerSets = this.state.finalRects.map((rect, index) => {
+      const transparentRect = this.state.transparentRects[index];
+      if (transparentRect && transparentRect.vertices) {
+        return transparentRect.vertices.map(v => ({ x: v.x, y: v.y }));
+      }
+      return [
+        { x: rect.x, y: rect.y },
+        { x: rect.x + rect.width, y: rect.y },
+        { x: rect.x + rect.width, y: rect.y + rect.height },
+        { x: rect.x, y: rect.y + rect.height },
+      ];
+    });
   }
 
   _calculateAspectRatioRect(transparentArea, aspectRatio, bleedRatio, alignment = 'center') {
