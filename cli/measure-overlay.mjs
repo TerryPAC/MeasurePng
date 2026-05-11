@@ -156,21 +156,60 @@ const cornerSets = finalRects.map((rect, i) => {
 // ── Build the three JSON sections (mirrors _updateInfoPanels + _calculateAndDisplayMargins) ──
 const toFloat = (value, precision = 4) => parseFloat(value.toFixed(precision));
 
-const poInfos = finalRects.map(rect => ({
-  x: toFloat(rect.x         / imgWidth),
-  y: toFloat(rect.y         / imgHeight),
-  w: toFloat(rect.width     / imgWidth),
-  h: toFloat(rect.height    / imgHeight),
-}));
+const poInfos = finalRects.map((rect, i) => {
+  const [tl, tr, br, bl] = cornerSets[i];
+  const left = rect.x;
+  const top = rect.y;
+  const right = rect.x + rect.width;
+  const bottom = rect.y + rect.height;
 
-const templateInfos = finalRects.map(rect => ({
-  width:  imgWidth,
-  height: imgHeight,
-  left:   Math.round(rect.x),
-  top:    Math.round(rect.y),
-  right:  Math.round(rect.x + rect.width),
-  bottom: Math.round(rect.y + rect.height),
-}));
+  // Use rounded pixel offsets for margins to match web tool
+  const m = [
+    Math.round(tl.x) - Math.round(left),
+    Math.round(tl.y) - Math.round(top),
+    Math.round(tr.x) - Math.round(right),
+    Math.round(tr.y) - Math.round(top),
+    Math.round(br.x) - Math.round(right),
+    Math.round(br.y) - Math.round(bottom),
+    Math.round(bl.x) - Math.round(left),
+    Math.round(bl.y) - Math.round(bottom),
+  ];
+
+  return {
+    x: toFloat(rect.x         / imgWidth),
+    y: toFloat(rect.y         / imgHeight),
+    w: toFloat(rect.width     / imgWidth),
+    h: toFloat(rect.height    / imgHeight),
+    margins: m.map((v, idx) => toFloat(v / (idx % 2 === 0 ? imgWidth : imgHeight), 6))
+  };
+});
+
+const templateInfos = finalRects.map((rect, i) => {
+  const [tl, tr, br, bl] = cornerSets[i];
+  const left = rect.x;
+  const top = rect.y;
+  const right = rect.x + rect.width;
+  const bottom = rect.y + rect.height;
+
+  return {
+    width:  imgWidth,
+    height: imgHeight,
+    left:   Math.round(left),
+    top:    Math.round(top),
+    right:  Math.round(right),
+    bottom: Math.round(bottom),
+    margins: [
+      Math.round(tl.x - left),
+      Math.round(tl.y - top),
+      Math.round(tr.x - right),
+      Math.round(tr.y - top),
+      Math.round(br.x - right),
+      Math.round(br.y - bottom),
+      Math.round(bl.x - left),
+      Math.round(bl.y - bottom),
+    ]
+  };
+});
 
 const positionsInfos = cornerSets.map(([tl, tr, br, bl]) => ({
   tlx: Math.round(tl.x), tly: Math.round(tl.y),
