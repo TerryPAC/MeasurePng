@@ -1,11 +1,11 @@
 # Triggered on a version tag (v1.0.0, v1.2.3, …).
 # Publishes the npm package AND deploys the GitHub Pages site in one release.
 #
-# Setup required (repository Settings → Secrets and variables → Actions):
-#   NPM_TOKEN  — Automation token from npmjs.com (Settings → Access Tokens)
-#
-# GitHub Pages must also be enabled in repository Settings → Pages,
-# with source set to "GitHub Actions".
+# Setup required:
+#   1. Add Trusted Publisher on npmjs.com (Settings → Trusted Publishers)
+#      - Workflow: publish.yml
+#   2. GitHub Pages must be enabled in repository Settings → Pages,
+#      with source set to "GitHub Actions".
 
 name: Publish & Deploy
 
@@ -15,7 +15,7 @@ on:
       - 'v[0-9]*'
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -30,17 +30,40 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      # Node 24 ships with npm 11.x which is required for Trusted Publisher / OIDC
+      # (Trusted Publisher requires npm >= 11.5.1 and Node >= 22.14.0)
+      # registry-url is required: setup-node generates .npmrc so npm knows where to publish
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
+
+      - name: Debug Info
+        run: |
+          node -v
+          npm -v
+
+      - name: Update version from tag
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "Updating version to $VERSION"
+          npm version $VERSION --no-git-tag-version
 
       - run: npm ci
 
-      - run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish to npm via OIDC (Trusted Publisher)
+        run: npm publish
+
+      - name: Commit and push version update
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: update version to ${GITHUB_REF#refs/tags/v} [skip ci]" || echo "No changes to commit"
+          git push origin HEAD:main
 
   # ── Deploy GitHub Pages ──────────────────────────────────────────────────────
   pages-deploy:
