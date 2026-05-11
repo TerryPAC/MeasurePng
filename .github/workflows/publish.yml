@@ -1,0 +1,62 @@
+# Triggered on a version tag (v1.0.0, v1.2.3, …).
+# Publishes the npm package AND deploys the GitHub Pages site in one release.
+#
+# Setup required (repository Settings → Secrets and variables → Actions):
+#   NPM_TOKEN  — Automation token from npmjs.com (Settings → Access Tokens)
+#
+# GitHub Pages must also be enabled in repository Settings → Pages,
+# with source set to "GitHub Actions".
+
+name: Publish & Deploy
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # ── Publish npm package ──────────────────────────────────────────────────────
+  npm-publish:
+    name: npm publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm ci
+
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  # ── Deploy GitHub Pages ──────────────────────────────────────────────────────
+  pages-deploy:
+    name: GitHub Pages
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

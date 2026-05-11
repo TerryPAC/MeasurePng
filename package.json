@@ -1,0 +1,36 @@
+{
+  "name": "measure-png-overlay",
+  "version": "1.0.0",
+  "description": "CLI tool to detect transparent areas in overlay images and output JSON",
+  "type": "module",
+  "bin": {
+    "measure-png-overlay": "./cli/measure-overlay.mjs"
+  },
+  "files": [
+    "cli/",
+    "js/imageProcessor.js",
+    "js/quadDetector.js",
+    "js/constants.js"
+  ],
+  "scripts": {
+    "test": "node cli/measure-overlay.mjs --help"
+  },
+  "dependencies": {
+    "sharp": "^0.33.5"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TerryPAC/MeasurePng.git"
+  },
+  "keywords": [
+    "png",
+    "overlay",
+    "transparent",
+    "measure",
+    "cli"
+  ]
+}

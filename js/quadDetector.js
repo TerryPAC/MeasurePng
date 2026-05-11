@@ -69,7 +69,7 @@ export function findQuadrilateralLines(houghResult, minAreaDimension = 100) {
     }
   }
 
-  console.log(`[Hough-lines] found ${peaks.length} peaks:`,
+  console.error(`[Hough-lines] found ${peaks.length} peaks:`,
     peaks.map(p => `(ρ=${p.rho}, θ=${p.thetaDeg}°, v=${p.votes})`).join(', '));
 
   if (peaks.length < 4) return null;
@@ -103,10 +103,10 @@ export function findQuadrilateralLines(houghResult, minAreaDimension = 100) {
 
   const pairAngle1 = angleDist(pair1[0].thetaDeg, pair1[1].thetaDeg);
   const pairAngle2 = angleDist(pair2[0].thetaDeg, pair2[1].thetaDeg);
-  console.log(`[Hough-lines] pairing: pair1 Δθ=${pairAngle1}°, pair2 Δθ=${pairAngle2}°`);
+  console.error(`[Hough-lines] pairing: pair1 Δθ=${pairAngle1}°, pair2 Δθ=${pairAngle2}°`);
 
   if (pairAngle1 > 20 || pairAngle2 > 20) {
-    console.log('[Hough-lines] FAIL: pairs not parallel enough');
+    console.error('[Hough-lines] FAIL: pairs not parallel enough');
     return null;
   }
 
@@ -131,9 +131,9 @@ export function orderQuadVertices(points) {
 }
 
 export function detectQuadrilateralVertices(boundaryPixels, imageWidth, imageHeight, pixelData = null, alphaThreshold = 128) {
-  console.log(`[Hough] boundaryPixels: ${boundaryPixels.length}, image: ${imageWidth}x${imageHeight}`);
+  console.error(`[Hough] boundaryPixels: ${boundaryPixels.length}, image: ${imageWidth}x${imageHeight}`);
   if (boundaryPixels.length < 50) {
-    console.log('[Hough] FAIL: too few boundary pixels (<50)');
+    console.error('[Hough] FAIL: too few boundary pixels (<50)');
     return null;
   }
 
@@ -145,23 +145,23 @@ export function detectQuadrilateralVertices(boundaryPixels, imageWidth, imageHei
     if (p.y > bMaxY) bMaxY = p.y;
   }
   const minDim = Math.min(bMaxX - bMinX, bMaxY - bMinY);
-  console.log(`[Hough] bounds: (${bMinX},${bMinY})-(${bMaxX},${bMaxY}), minDim: ${minDim}`);
+  console.error(`[Hough] bounds: (${bMinX},${bMinY})-(${bMaxX},${bMaxY}), minDim: ${minDim}`);
 
   let pixelsForHough = boundaryPixels;
   const MAX_HOUGH_PIXELS = 5000;
   if (boundaryPixels.length > MAX_HOUGH_PIXELS) {
     const step = Math.ceil(boundaryPixels.length / MAX_HOUGH_PIXELS);
     pixelsForHough = boundaryPixels.filter((_, i) => i % step === 0);
-    console.log(`[Hough] subsampled to ${pixelsForHough.length} pixels`);
+    console.error(`[Hough] subsampled to ${pixelsForHough.length} pixels`);
   }
 
   const houghResult = houghTransform(pixelsForHough, imageWidth, imageHeight);
-  console.log(`[Hough] accumulator: ${houghResult.numRho}x${houghResult.numTheta}`);
+  console.error(`[Hough] accumulator: ${houghResult.numRho}x${houghResult.numTheta}`);
 
   const linePairs = findQuadrilateralLines(houghResult, minDim);
 
   if (!linePairs) {
-    console.log('[Hough] FAIL: findQuadrilateralLines returned null');
+    console.error('[Hough] FAIL: findQuadrilateralLines returned null');
     return null;
   }
 
@@ -171,11 +171,11 @@ export function detectQuadrilateralVertices(boundaryPixels, imageWidth, imageHei
   const minVotesAbsolute = pixelsForHough.length * 0.02;
   const minVotesRelative = maxVotes * 0.25;
   const minVotes = Math.max(minVotesAbsolute, minVotesRelative);
-  console.log(`[Hough] 4 lines found. votes: [${allLines.map(l => l.votes).join(', ')}], minRequired: ${minVotes.toFixed(1)}`);
-  console.log(`[Hough] lines: ${allLines.map(l => `(rho=${l.rho.toFixed(1)}, θ=${l.thetaDeg}°)`).join(', ')}`);
+  console.error(`[Hough] 4 lines found. votes: [${allLines.map(l => l.votes).join(', ')}], minRequired: ${minVotes.toFixed(1)}`);
+  console.error(`[Hough] lines: ${allLines.map(l => `(rho=${l.rho.toFixed(1)}, θ=${l.thetaDeg}°)`).join(', ')}`);
 
   if (allLines.some(line => line.votes < minVotes)) {
-    console.log('[Hough] FAIL: some lines have too few votes');
+    console.error('[Hough] FAIL: some lines have too few votes');
     return null;
   }
 
@@ -191,14 +191,14 @@ export function detectQuadrilateralVertices(boundaryPixels, imageWidth, imageHei
     const sign = line.rho >= rhoCenter ? 1 : -1;
     line.rho += sign * EXPAND_PX;
   }
-  console.log(`[Hough] lines expanded outward by ${EXPAND_PX}px (center: ${cx.toFixed(1)},${cy.toFixed(1)})`);
+  console.error(`[Hough] lines expanded outward by ${EXPAND_PX}px (center: ${cx.toFixed(1)},${cy.toFixed(1)})`);
 
   const vertices = [];
   for (const l1 of pair1) {
     for (const l2 of pair2) {
       const pt = intersectHoughLines(l1, l2);
       if (!pt) {
-        console.log(`[Hough] FAIL: parallel lines cannot intersect`);
+        console.error(`[Hough] FAIL: parallel lines cannot intersect`);
         return null;
       }
       vertices.push(pt);
@@ -211,13 +211,13 @@ export function detectQuadrilateralVertices(boundaryPixels, imageWidth, imageHei
   for (const v of vertices) {
     if (v.x < -margin || v.x > imageWidth + margin ||
       v.y < -margin || v.y > imageHeight + margin) {
-      console.log(`[Hough] FAIL: vertex out of bounds: (${v.x.toFixed(1)}, ${v.y.toFixed(1)}), margin: ${margin}`);
+      console.error(`[Hough] FAIL: vertex out of bounds: (${v.x.toFixed(1)}, ${v.y.toFixed(1)}), margin: ${margin}`);
       return null;
     }
   }
 
   const ordered = orderQuadVertices(vertices);
-  console.log(`[Hough] SUCCESS: vertices = ${ordered.map(v => `(${v.x.toFixed(1)},${v.y.toFixed(1)})`).join(', ')}`);
+  console.error(`[Hough] SUCCESS: vertices = ${ordered.map(v => `(${v.x.toFixed(1)},${v.y.toFixed(1)})`).join(', ')}`);
   return {
     vertices: ordered,
     houghLines: [pair1, pair2],

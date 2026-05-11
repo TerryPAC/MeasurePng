@@ -5,17 +5,15 @@ import {
 } from './constants.js';
 import { detectQuadrilateralVertices } from './quadDetector.js';
 
-export function detectTransparentArea(img, alphaThreshold) {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  canvas.width = img.width;
-  canvas.height = img.height;
-  ctx.drawImage(img, 0, 0);
-
-  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const data = imageData.data;
-  const w = canvas.width;
-  const h = canvas.height;
+/**
+ * Core detection algorithm — no DOM dependency.
+ * @param {Uint8ClampedArray|Uint8Array} data  flat RGBA pixel buffer
+ * @param {number} w  image width in pixels
+ * @param {number} h  image height in pixels
+ * @param {number} alphaThreshold  pixels with alpha < threshold are considered transparent
+ * @returns {Array<{x,y,width,height,vertices,houghLines}>}
+ */
+export function detectTransparentAreaCore(data, w, h, alphaThreshold) {
   const visited = new Array(w * h).fill(false);
   let areas = [];
 
@@ -77,8 +75,8 @@ export function detectTransparentArea(img, alphaThreshold) {
     return [{
       x: fallbackMargin,
       y: fallbackMargin,
-      width: img.width - fallbackMargin * 2,
-      height: img.height - fallbackMargin * 2,
+      width: w - fallbackMargin * 2,
+      height: h - fallbackMargin * 2,
       vertices: null,
       houghLines: null,
     }];
@@ -112,6 +110,17 @@ export function detectTransparentArea(img, alphaThreshold) {
       houghLines: detection ? detection.houghLines : null,
     };
   });
+}
+
+/** Browser wrapper: draws img to an offscreen canvas, then delegates to detectTransparentAreaCore. */
+export function detectTransparentArea(img, alphaThreshold) {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  ctx.drawImage(img, 0, 0);
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  return detectTransparentAreaCore(data, canvas.width, canvas.height, alphaThreshold);
 }
 
 export function isAreaContained(containerArea, containedArea) {
