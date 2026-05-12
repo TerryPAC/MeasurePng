@@ -109,3 +109,14 @@ ehthumbs.db
 # Windows
 Desktop.ini
 $RECYCLE.BIN/
+
+# .graphifyignore
+node_modules/
+dist/
+*.generated.py
+
+# only index src/, ignore everything else
+/graphify-out/*
+!src/
+!src/**
+

@@ -61,6 +61,8 @@ export class ImageProcessorApp {
       rotation: 0,
       scale: 1,
       originalRects: [], // Store original rects for each area
+      /** Pre-rotation/scale corner geometry (image space), synced after corner drags */
+      baseCornerSets: [],
     };
   }
 
@@ -161,6 +163,7 @@ export class ImageProcessorApp {
     this.transform.rotation = 0;
     this.transform.scale = 1;
     this.transform.originalRects = [];
+    this.transform.baseCornerSets = [];
 
     this.elements.rotationControl.value = 0;
     this.elements.scaleControl.value = 100;
@@ -222,6 +225,7 @@ export class ImageProcessorApp {
     // Reset state from confirmation step
     this.state.finalRects = [];
     this.state.cornerSets = [];
+    this.transform.baseCornerSets = [];
     this.interactiveCtx.clearRect(0, 0, this.elements.interactiveCanvas.width, this.elements.interactiveCanvas.height);
     this.elements.transformControls.style.display = 'none';
     this.elements.calculateMarginsButton.style.visibility = 'hidden';
@@ -300,6 +304,11 @@ export class ImageProcessorApp {
 
     this.transform.originalRects = this.state.finalRects.map(rect => ({ ...rect }));
 
+    this._initializeCorners();
+    this.transform.baseCornerSets = this.state.cornerSets.map(corners =>
+      corners.map(c => ({ x: c.x, y: c.y }))
+    );
+
     if (isMultiArea) {
       this.elements.transformControls.style.display = 'none';
     } else {
@@ -309,7 +318,6 @@ export class ImageProcessorApp {
       this._updateSliderValuePosition(this.elements.scaleControl, this.elements.scaleValue);
     }
 
-    this._initializeCorners();
     this._updateInfoPanels();
     this._drawResult(true);
     this._drawCorners();
@@ -654,10 +662,34 @@ export class ImageProcessorApp {
   }
 
   _resetMouseState() {
+    if (
+      this.state.isDragging &&
+      this.state.selectedCornerInfo &&
+      this.transform.baseCornerSets.length > 0
+    ) {
+      const { areaIndex } = this.state.selectedCornerInfo;
+      const r = this.transform.originalRects[areaIndex];
+      if (r && this.state.cornerSets[areaIndex]?.length) {
+        const center = { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+        this.transform.baseCornerSets[areaIndex] = this.state.cornerSets[areaIndex].map(pt =>
+          this._inverseTransformPoint(pt, center)
+        );
+      }
+    }
     this.state.isDragging = false;
     this.state.selectedCornerInfo = null;
     this.state.selectedEdgeInfo = null;
     this.state.originalMousePos = null;
+  }
+
+  _inverseTransformPoint(point, center) {
+    const s = this.transform.scale;
+    if (!s) return { x: point.x, y: point.y };
+    const unscaled = {
+      x: center.x + (point.x - center.x) / s,
+      y: center.y + (point.y - center.y) / s,
+    };
+    return rotatePoint(unscaled, center, -this.transform.rotation);
   }
 
   _updateRectWithTransforms() {
@@ -669,13 +701,19 @@ export class ImageProcessorApp {
       y: originalRect.y + originalRect.height / 2
     };
 
-    const o = originalRect;
-    const originalCorners = [
-      { x: o.x, y: o.y },
-      { x: o.x + o.width, y: o.y },
-      { x: o.x + o.width, y: o.y + o.height },
-      { x: o.x, y: o.y + o.height },
-    ];
+    const base = this.transform.baseCornerSets[0];
+    let originalCorners;
+    if (base && base.length === 4) {
+      originalCorners = base.map(c => ({ x: c.x, y: c.y }));
+    } else {
+      const o = originalRect;
+      originalCorners = [
+        { x: o.x, y: o.y },
+        { x: o.x + o.width, y: o.y },
+        { x: o.x + o.width, y: o.y + o.height },
+        { x: o.x, y: o.y + o.height },
+      ];
+    }
 
     this.state.cornerSets[0] = originalCorners.map(corner => {
       const rotated = rotatePoint(corner, center, this.transform.rotation);
