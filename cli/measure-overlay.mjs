@@ -92,6 +92,7 @@ process.stderr.write(`[measure-png-overlay] decoded: ${imgWidth}x${imgHeight}\n`
 // ── Detection ─────────────────────────────────────────────────────────────────
 const jsDir = path.resolve(__dirname, '..', 'js');
 const { detectTransparentAreaCore } = await import(path.join(jsDir, 'imageProcessor.js'));
+const { intersectHoughLines, orderQuadVertices } = await import(path.join(jsDir, 'quadDetector.js'));
 
 const ALPHA_THRESHOLD = 192;
 const transparentRects = detectTransparentAreaCore(data, imgWidth, imgHeight, ALPHA_THRESHOLD);
@@ -124,7 +125,7 @@ function calculateAspectRatioRect(transparentArea, aspectRatio, bleedRatio, alig
     default:       finalY = y + (height - finalHeight) / 2; break;
   }
 
-  return { x: finalX, y: finalY, width: finalWidth, height: finalHeight };
+  return { x: finalX, y: finalY, width: finalWidth, height: finalHeight, bleeding };
 }
 
 const hasProductDimensions = productWidth != null && productHeight != null;
@@ -143,6 +144,34 @@ if (hasProductDimensions) {
 const cornerSets = finalRects.map((rect, i) => {
   const tr = transparentRects[i];
   if (tr && tr.vertices) {
+    const bleeding = rect.bleeding || 0;
+    if (bleeding > 0 && tr.houghLines) {
+      const [pair1, pair2] = tr.houghLines;
+      const allLines = [...pair1, ...pair2];
+      const cx = tr.x + tr.width / 2;
+      const cy = tr.y + tr.height / 2;
+
+      const expandedLines = allLines.map(line => {
+        const newLine = { ...line };
+        const rhoCenter = cx * Math.cos(newLine.theta) + cy * Math.sin(newLine.theta);
+        const sign = newLine.rho >= rhoCenter ? 1 : -1;
+        newLine.rho += sign * bleeding;
+        return newLine;
+      });
+
+      const newPair1 = [expandedLines[0], expandedLines[1]];
+      const newPair2 = [expandedLines[2], expandedLines[3]];
+      const newVertices = [];
+      for (const l1 of newPair1) {
+        for (const l2 of newPair2) {
+          const pt = intersectHoughLines(l1, l2);
+          if (pt) newVertices.push(pt);
+        }
+      }
+      if (newVertices.length === 4) {
+        return orderQuadVertices(newVertices);
+      }
+    }
     return tr.vertices.map(v => ({ x: v.x, y: v.y }));
   }
   return [

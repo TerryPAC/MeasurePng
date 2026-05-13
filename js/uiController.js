@@ -11,6 +11,7 @@ import {
   pointToLineDistance
 } from './utils.js';
 import { detectTransparentArea } from './imageProcessor.js';
+import { intersectHoughLines, orderQuadVertices } from './quadDetector.js';
 
 export class ImageProcessorApp {
   constructor() {
@@ -328,6 +329,34 @@ export class ImageProcessorApp {
     this.state.cornerSets = this.state.finalRects.map((rect, index) => {
       const transparentRect = this.state.transparentRects[index];
       if (transparentRect && transparentRect.vertices) {
+        const bleeding = rect.bleeding || 0;
+        if (bleeding > 0 && transparentRect.houghLines) {
+          const [pair1, pair2] = transparentRect.houghLines;
+          const allLines = [...pair1, ...pair2];
+          const cx = transparentRect.x + transparentRect.width / 2;
+          const cy = transparentRect.y + transparentRect.height / 2;
+
+          const expandedLines = allLines.map(line => {
+            const newLine = { ...line };
+            const rhoCenter = cx * Math.cos(newLine.theta) + cy * Math.sin(newLine.theta);
+            const sign = newLine.rho >= rhoCenter ? 1 : -1;
+            newLine.rho += sign * bleeding;
+            return newLine;
+          });
+
+          const newPair1 = [expandedLines[0], expandedLines[1]];
+          const newPair2 = [expandedLines[2], expandedLines[3]];
+          const newVertices = [];
+          for (const l1 of newPair1) {
+            for (const l2 of newPair2) {
+              const pt = intersectHoughLines(l1, l2);
+              if (pt) newVertices.push(pt);
+            }
+          }
+          if (newVertices.length === 4) {
+            return orderQuadVertices(newVertices);
+          }
+        }
         return transparentRect.vertices.map(v => ({ x: v.x, y: v.y }));
       }
       return [
@@ -393,6 +422,7 @@ export class ImageProcessorApp {
       y: finalY,
       width: finalWidth,
       height: finalHeight,
+      bleeding: bleeding,
     };
   }
 
@@ -448,9 +478,25 @@ export class ImageProcessorApp {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     ctx.lineWidth = 2;
 
-    this.state.cornerSets.forEach(corners => {
-      // Draw connecting lines
+    this.state.cornerSets.forEach((corners, index) => {
+      const transparentRect = this.state.transparentRects[index];
+      
+      // 1. Draw raw edge detection (green dashed) if it exists
+      if (transparentRect && transparentRect.vertices) {
+        ctx.strokeStyle = 'green';
+        ctx.setLineDash([5, 5]);
+        ctx.beginPath();
+        const v = transparentRect.vertices;
+        ctx.moveTo(v[0].x + offsetX, v[0].y + offsetY);
+        for (let i = 1; i <= 4; i++) {
+          ctx.lineTo(v[i % 4].x + offsetX, v[i % 4].y + offsetY);
+        }
+        ctx.stroke();
+      }
+
+      // 2. Draw Display Area (magenta solid)
       ctx.strokeStyle = 'magenta';
+      ctx.setLineDash([]);
       ctx.beginPath();
       ctx.moveTo(corners[0].x + offsetX, corners[0].y + offsetY);
       for (let i = 1; i <= 4; i++) {
