@@ -167,14 +167,23 @@ export function detectQuadrilateralVertices(boundaryPixels, imageWidth, imageHei
 
   const [pair1, pair2] = linePairs;
   const allLines = [...pair1, ...pair2];
-  const maxVotes = allLines[0].votes;
   const minVotesAbsolute = pixelsForHough.length * 0.02;
-  const minVotesRelative = maxVotes * 0.25;
-  const minVotes = Math.max(minVotesAbsolute, minVotesRelative);
-  console.error(`[Hough] 4 lines found. votes: [${allLines.map(l => l.votes).join(', ')}], minRequired: ${minVotes.toFixed(1)}`);
+
+  // Check each pair independently: the weaker line in a pair must reach at least
+  // PAIR_RATIO of the stronger line in the same pair. This avoids rejecting a valid
+  // but lower-contrast side just because the opposite side is much stronger.
+  const PAIR_RATIO = 0.30;
+  function pairMinVotes(pair) {
+    const pairMax = Math.max(pair[0].votes, pair[1].votes);
+    return Math.max(minVotesAbsolute, pairMax * PAIR_RATIO);
+  }
+  const minVotes1 = pairMinVotes(pair1);
+  const minVotes2 = pairMinVotes(pair2);
+
+  console.error(`[Hough] 4 lines found. votes: [${allLines.map(l => l.votes).join(', ')}], minRequired: pair1=${minVotes1.toFixed(1)}, pair2=${minVotes2.toFixed(1)}`);
   console.error(`[Hough] lines: ${allLines.map(l => `(rho=${l.rho.toFixed(1)}, θ=${l.thetaDeg}°)`).join(', ')}`);
 
-  if (allLines.some(line => line.votes < minVotes)) {
+  if (pair1.some(line => line.votes < minVotes1) || pair2.some(line => line.votes < minVotes2)) {
     console.error('[Hough] FAIL: some lines have too few votes');
     return null;
   }
