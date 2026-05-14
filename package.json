@@ -1,6 +1,6 @@
 {
   "name": "measure-png-overlay",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "CLI tool to detect transparent areas in overlay images and output JSON",
   "type": "module",
   "bin": {
