@@ -29,15 +29,19 @@ export function houghTransform(boundaryPixels, imageWidth, imageHeight) {
   return { accumulator, numTheta, numRho, rhoOffset };
 }
 
-export function findQuadrilateralLines(houghResult, minAreaDimension = 100) {
+/**
+ * Extracts up to `maxPeaks` local maxima from the Hough accumulator using
+ * non-maximum suppression (NMS).  Each returned peak has { rho, theta, thetaDeg, votes }.
+ */
+export function extractHoughPeaks(houghResult, maxPeaks, minAreaDimension = 100) {
   const { accumulator, numTheta, numRho, rhoOffset } = houghResult;
   const rhoNms = Math.max(10, Math.min(40, Math.floor(minAreaDimension / 10)));
   const thetaNms = 8;
 
   const accCopy = new Int32Array(accumulator);
-
   const peaks = [];
-  for (let i = 0; i < 6; i++) {
+
+  for (let i = 0; i < maxPeaks; i++) {
     let bestVal = 0, bestR = 0, bestT = 0;
     for (let r = 0; r < numRho; r++) {
       for (let t = 0; t < numTheta; t++) {
@@ -68,6 +72,12 @@ export function findQuadrilateralLines(houghResult, minAreaDimension = 100) {
       }
     }
   }
+
+  return peaks;
+}
+
+export function findQuadrilateralLines(houghResult, minAreaDimension = 100) {
+  const peaks = extractHoughPeaks(houghResult, 6, minAreaDimension);
 
   console.error(`[Hough-lines] found ${peaks.length} peaks:`,
     peaks.map(p => `(ρ=${p.rho}, θ=${p.thetaDeg}°, v=${p.votes})`).join(', '));
@@ -257,6 +267,76 @@ export function orderQuadVertices(points) {
   return [top[0], top[1], bottom[1], bottom[0]];
 }
 
+/**
+ * Dogtag fallback step 1: find the single best pair of parallel lines from Hough peaks.
+ * Used when the shape has only 2 strong straight edges (e.g. dogtag with arc ends).
+ */
+export function findDominantParallelPair(houghResult, minAreaDimension = 100) {
+  const peaks = extractHoughPeaks(houghResult, 8, minAreaDimension);
+
+  if (peaks.length < 2) return null;
+
+  function angleDist(a, b) {
+    const d = Math.abs(a - b);
+    return Math.min(d, 180 - d);
+  }
+
+  let bestPair = null;
+  let bestScore = Infinity;
+  for (let i = 0; i < peaks.length; i++) {
+    for (let j = i + 1; j < peaks.length; j++) {
+      const score = angleDist(peaks[i].thetaDeg, peaks[j].thetaDeg);
+      if (score < bestScore) {
+        bestScore = score;
+        bestPair = [peaks[i], peaks[j]];
+      }
+    }
+  }
+
+  if (!bestPair || bestScore > 20) {
+    console.error(`[Hough-dogtag] No good parallel pair found (best Δθ=${bestScore}°)`);
+    return null;
+  }
+
+  console.error(
+    `[Hough-dogtag] Dominant parallel pair: θ=[${bestPair[0].thetaDeg}°,${bestPair[1].thetaDeg}°], ` +
+    `votes=[${bestPair[0].votes},${bestPair[1].votes}], Δθ=${bestScore}°`
+  );
+  return bestPair;
+}
+
+/**
+ * Dogtag fallback step 2: synthesise the perpendicular pair by projecting all boundary
+ * pixels onto the direction orthogonal to the straight-edge pair and taking the extreme
+ * (min/max) projections as the two bounding lines.  These lines tangentially bound the
+ * arc ends without requiring any arc pixels to vote in Hough space.
+ */
+export function computeBoundingPair(boundaryPixels, parallelPair) {
+  const refTheta = (parallelPair[0].theta + parallelPair[1].theta) / 2;
+  let thetaPerp = refTheta + Math.PI / 2;
+  if (thetaPerp >= Math.PI) thetaPerp -= Math.PI;
+
+  const cosP = Math.cos(thetaPerp);
+  const sinP = Math.sin(thetaPerp);
+
+  let minProj = Infinity, maxProj = -Infinity;
+  for (const p of boundaryPixels) {
+    const proj = p.x * cosP + p.y * sinP;
+    if (proj < minProj) minProj = proj;
+    if (proj > maxProj) maxProj = proj;
+  }
+
+  const thetaDeg = Math.round(thetaPerp * 180 / Math.PI);
+  console.error(
+    `[Hough-dogtag] Bounding pair: θ=${thetaDeg}°, ρ=[${minProj.toFixed(1)}, ${maxProj.toFixed(1)}]`
+  );
+
+  return [
+    { rho: minProj, theta: thetaPerp, thetaDeg, votes: 0 },
+    { rho: maxProj, theta: thetaPerp, thetaDeg, votes: 0 },
+  ];
+}
+
 export function detectQuadrilateralVertices(boundaryPixels, imageWidth, imageHeight, pixelData = null, alphaThreshold = 128) {
   console.error(`[Hough] boundaryPixels: ${boundaryPixels.length}, image: ${imageWidth}x${imageHeight}`);
   if (boundaryPixels.length < 50) {
@@ -285,11 +365,43 @@ export function detectQuadrilateralVertices(boundaryPixels, imageWidth, imageHei
   const houghResult = houghTransform(pixelsForHough, imageWidth, imageHeight);
   console.error(`[Hough] accumulator: ${houghResult.numRho}x${houghResult.numTheta}`);
 
-  const linePairs = findQuadrilateralLines(houghResult, minDim);
+  // Peek at the top-4 peaks to decide which detection path to take.
+  // If the 3rd peak's votes are < DOGTAG_RATIO of the 2nd peak's votes the vote
+  // distribution has a sharp "cliff" after the first two lines, indicating a shape
+  // with only 2 dominant straight edges (e.g. dogtag with arc ends).  In that case
+  // we skip the standard 4-line path entirely and use the dogtag strategy.
+  const DOGTAG_RATIO = 0.3;
+  const topPeaks = extractHoughPeaks(houghResult, 4, minDim);
+  const isDogtagShape = topPeaks.length < 3 ||
+    topPeaks[2].votes < topPeaks[1].votes * DOGTAG_RATIO;
 
-  if (!linePairs) {
-    console.error('[Hough] FAIL: findQuadrilateralLines returned null');
-    return null;
+  console.error(
+    `[Hough] Peak votes: [${topPeaks.map(p => p.votes).join(', ')}]` +
+    (isDogtagShape
+      ? ` → dogtag shape (3rd/2nd = ${topPeaks.length >= 3 ? (topPeaks[2].votes / topPeaks[1].votes).toFixed(2) : 'n/a'} < ${DOGTAG_RATIO})`
+      : ' → standard shape')
+  );
+
+  let linePairs;
+  let isDogtagFallback = false;
+
+  if (isDogtagShape) {
+    const dominantPair = findDominantParallelPair(houghResult, minDim);
+    if (!dominantPair) {
+      console.error('[Hough] FAIL: dogtag path — cannot find dominant parallel pair');
+      return null;
+    }
+    // Use all boundary pixels (not the subsampled set) for accurate min/max projection.
+    const boundingPair = computeBoundingPair(boundaryPixels, dominantPair);
+    linePairs = [dominantPair, boundingPair];
+    isDogtagFallback = true;
+    console.error('[Hough] Dogtag path: straight-edge pair + arc-bounding pair');
+  } else {
+    linePairs = findQuadrilateralLines(houghResult, minDim);
+    if (!linePairs) {
+      console.error('[Hough] FAIL: findQuadrilateralLines returned null');
+      return null;
+    }
   }
 
   const [pair1, pair2] = linePairs;
@@ -310,7 +422,12 @@ export function detectQuadrilateralVertices(boundaryPixels, imageWidth, imageHei
   console.error(`[Hough] 4 lines found. votes: [${allLines.map(l => l.votes).join(', ')}], minRequired: pair1=${minVotes1.toFixed(1)}, pair2=${minVotes2.toFixed(1)}`);
   console.error(`[Hough] lines: ${allLines.map(l => `(rho=${l.rho.toFixed(1)}, θ=${l.thetaDeg}°)`).join(', ')}`);
 
-  if (pair1.some(line => line.votes < minVotes1) || pair2.some(line => line.votes < minVotes2)) {
+  // For the dogtag fallback pair2 is synthetic (votes=0 by design) — only validate pair1.
+  const voteFail = isDogtagFallback
+    ? pair1.some(line => line.votes < minVotes1)
+    : (pair1.some(line => line.votes < minVotes1) || pair2.some(line => line.votes < minVotes2));
+
+  if (voteFail) {
     console.error('[Hough] FAIL: some lines have too few votes');
     return null;
   }
