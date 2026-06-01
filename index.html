@@ -387,6 +387,44 @@
             color: transparent;
         }
 
+        .toggle-button {
+            padding: 2px 5px;
+            font-size: 12px;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #666;
+            transition: all 0.2s;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 32px;
+        }
+
+        .toggle-button:hover {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .toggle-button.active {
+            background: #4CAF50;
+            color: white;
+            border-color: #45a049;
+        }
+
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        input[type="number"] {
+            -moz-appearance: textfield;
+            appearance: textfield;
+        }
+
         /* Result Info */
         .result-info {
             margin: 8px 0;
@@ -437,7 +475,16 @@
             <div class="input-group row">
                 <input type="number" id="productWidth" min="1" placeholder="Product Width">
                 <input type="number" id="productHeight" min="1" placeholder="Product Height">
-                <input type="number" id="bleed" min="0" placeholder="Bleed">
+                <div id="bleedInputContainer" style="display: flex; flex: 1;">
+                    <input type="number" id="bleed" min="0" placeholder="Bleed" style="width: 100%;">
+                </div>
+                <div id="printableInputContainer" style="display: none; gap: 10px; flex: 2;">
+                    <input type="number" id="printableWidth" min="1" placeholder="Printable W">
+                    <input type="number" id="printableHeight" min="1" placeholder="Printable H">
+                </div>
+                <button id="toggleInputMode" class="toggle-button" title="Switch Input Mode (Bleed vs Printable Size)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline><line x1="4" y1="20" x2="21" y2="3"></line><polyline points="21 16 21 21 16 21"></polyline><line x1="15" y1="15" x2="21" y2="21"></line><line x1="4" y1="4" x2="9" y2="9"></line></svg>
+                </button>
             </div>
 
             <div class="controls-group">

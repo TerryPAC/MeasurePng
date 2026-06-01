@@ -20,6 +20,11 @@ export class ImageProcessorApp {
       productWidthInput: document.getElementById('productWidth'),
       productHeightInput: document.getElementById('productHeight'),
       bleedInput: document.getElementById('bleed'),
+      printableWidthInput: document.getElementById('printableWidth'),
+      printableHeightInput: document.getElementById('printableHeight'),
+      bleedInputContainer: document.getElementById('bleedInputContainer'),
+      printableInputContainer: document.getElementById('printableInputContainer'),
+      toggleInputMode: document.getElementById('toggleInputMode'),
       alignmentControl: document.getElementById('alignmentControl'),
       horizontalGuidesInput: document.getElementById('horizontalGuidesInput'),
       verticalGuidesInput: document.getElementById('verticalGuidesInput'),
@@ -53,6 +58,7 @@ export class ImageProcessorApp {
       selectedEdgeInfo: null, // { areaIndex, edgeType }
       originalMousePos: null,
       canvasOffset: { x: 0, y: 0 },
+      inputMode: 'bleed', // 'bleed' or 'printable'
     };
 
     this.rafId = null;
@@ -96,7 +102,7 @@ export class ImageProcessorApp {
       const slider = e.target;
       this.transform.scale = parseFloat(slider.value) / 100;
       const output = this.elements.scaleValue;
-      output.textContent = this.transform.scale.toFixed(2);
+      output.textContent = Number(this.transform.scale.toFixed(2));
       this._updateRectWithTransforms();
       this._updateSliderValuePosition(slider, output);
     });
@@ -105,6 +111,8 @@ export class ImageProcessorApp {
     this.elements.verticalGuidesInput.addEventListener('input', () => this._drawCorners());
 
     this.elements.canvasScaleControl.addEventListener('input', (e) => this._handleCanvasScaleChange(e));
+
+    this.elements.toggleInputMode.addEventListener('click', () => this._toggleInputMode());
 
     this.elements.alphaThresholdControl.addEventListener('input', (e) => {
       const slider = e.target;
@@ -145,6 +153,42 @@ export class ImageProcessorApp {
       if (this.state.finalRects.length > 0) {
         this._drawCorners();
       }
+    }
+  }
+
+  _toggleInputMode() {
+    const productWidth = parseFloat(this.elements.productWidthInput.value) || 0;
+    const productHeight = parseFloat(this.elements.productHeightInput.value) || 0;
+
+    const formatNum = (num) => Number(num.toFixed(2));
+
+    if (this.state.inputMode === 'bleed') {
+      this.state.inputMode = 'printable';
+      
+      // Pre-fill printable dimensions if possible
+      const bleed = parseFloat(this.elements.bleedInput.value) || 0;
+      if (productWidth > 0 && productHeight > 0) {
+        this.elements.printableWidthInput.value = formatNum(productWidth + 2 * bleed);
+        this.elements.printableHeightInput.value = formatNum(productHeight + 2 * bleed);
+      }
+
+      this.elements.bleedInputContainer.style.display = 'none';
+      this.elements.printableInputContainer.style.display = 'flex';
+      this.elements.toggleInputMode.classList.add('active');
+      this.elements.toggleInputMode.title = "Switch to Bleed Mode";
+    } else {
+      this.state.inputMode = 'bleed';
+
+      // Pre-fill bleed if possible
+      const pWidth = parseFloat(this.elements.printableWidthInput.value) || 0;
+      if (productWidth > 0 && pWidth > productWidth) {
+        this.elements.bleedInput.value = formatNum((pWidth - productWidth) / 2);
+      }
+
+      this.elements.bleedInputContainer.style.display = 'flex';
+      this.elements.printableInputContainer.style.display = 'none';
+      this.elements.toggleInputMode.classList.remove('active');
+      this.elements.toggleInputMode.title = "Switch to Printable Size Mode";
     }
   }
 
@@ -291,13 +335,32 @@ export class ImageProcessorApp {
 
     if (hasProductDimensions) {
       const aspectRatio = productWidth / productHeight;
-      const bleed = parseFloat(this.elements.bleedInput.value) || 0;
-      const bleedRatio = bleed / productWidth;
       const alignment = this.elements.alignmentControl?.value || 'center';
 
-      this.state.finalRects = this.state.transparentRects.map(transparentRect =>
-        this._calculateAspectRatioRect(transparentRect, aspectRatio, bleedRatio, alignment)
-      );
+      if (this.state.inputMode === 'bleed') {
+        const bleed = parseFloat(this.elements.bleedInput.value) || 0;
+        const bleedRatio = bleed / productWidth;
+        this.state.finalRects = this.state.transparentRects.map(transparentRect =>
+          this._calculateAspectRatioRect(transparentRect, aspectRatio, bleedRatio, alignment, productWidth, productHeight)
+        );
+      } else {
+        let printableWidth = parseFloat(this.elements.printableWidthInput.value);
+        let printableHeight = parseFloat(this.elements.printableHeightInput.value);
+
+        // Validation: Printable Width >= Product Width, Printable Height >= Product Height
+        if (isNaN(printableWidth) || printableWidth < productWidth) {
+          printableWidth = productWidth;
+          this.elements.printableWidthInput.value = printableWidth;
+        }
+        if (isNaN(printableHeight) || printableHeight < productHeight) {
+          printableHeight = productHeight;
+          this.elements.printableHeightInput.value = printableHeight;
+        }
+
+        this.state.finalRects = this.state.transparentRects.map(transparentRect =>
+          this._calculateAspectRatioRect(transparentRect, aspectRatio, 0, alignment, productWidth, productHeight, printableWidth, printableHeight)
+        );
+      }
     } else {
       // If no product dimensions are provided, use the transparent rects as they are.
       this.state.finalRects = this.state.transparentRects.map(rect => ({ ...rect }));
@@ -329,8 +392,9 @@ export class ImageProcessorApp {
     this.state.cornerSets = this.state.finalRects.map((rect, index) => {
       const transparentRect = this.state.transparentRects[index];
       if (transparentRect && transparentRect.vertices) {
-        const bleeding = rect.bleeding || 0;
-        if (bleeding > 0 && transparentRect.houghLines) {
+        const bleedingX = rect.bleedingX || 0;
+        const bleedingY = rect.bleedingY || 0;
+        if ((bleedingX > 0 || bleedingY > 0) && transparentRect.houghLines) {
           const [pair1, pair2] = transparentRect.houghLines;
           const allLines = [...pair1, ...pair2];
           const cx = transparentRect.x + transparentRect.width / 2;
@@ -340,7 +404,15 @@ export class ImageProcessorApp {
             const newLine = { ...line };
             const rhoCenter = cx * Math.cos(newLine.theta) + cy * Math.sin(newLine.theta);
             const sign = newLine.rho >= rhoCenter ? 1 : -1;
-            newLine.rho += sign * bleeding;
+            
+            // Determine if the line is more vertical or horizontal
+            // x * cos(theta) + y * sin(theta) = rho
+            // theta = 0 -> x = rho (vertical)
+            // theta = PI/2 -> y = rho (horizontal)
+            const isVertical = Math.abs(Math.cos(newLine.theta)) > Math.abs(Math.sin(newLine.theta));
+            const currentBleed = isVertical ? bleedingX : bleedingY;
+            
+            newLine.rho += sign * currentBleed;
             return newLine;
           });
 
@@ -368,8 +440,11 @@ export class ImageProcessorApp {
     });
   }
 
-  _calculateAspectRatioRect(transparentArea, aspectRatio, bleedRatio, alignment = 'center') {
+  _calculateAspectRatioRect(transparentArea, aspectRatio, bleedRatio, alignment = 'center', productWidth = 1, productHeight = 1, printableWidth = null, printableHeight = null) {
     const { x, y, width, height } = transparentArea;
+    let finalWidth, finalHeight, bleedingX, bleedingY;
+
+    // 1. Calculate newWidth/newHeight (pixels) to cover transparent area with product aspect ratio
     let newWidth, newHeight;
     if (width / height > aspectRatio) {
       newWidth = width;
@@ -379,19 +454,33 @@ export class ImageProcessorApp {
       newWidth = newHeight * aspectRatio;
     }
 
-    const bleeding = newWidth * bleedRatio;
-    const finalWidth = newWidth + 2 * bleeding;
-    const finalHeight = newHeight + 2 * bleeding;
+    // 2. Calculate pixelScale (pixels per product unit)
+    const pixelScale = newWidth / productWidth;
+
+    if (printableWidth !== null && printableHeight !== null) {
+      // 3a. In Printable mode, use direct inputs scaled to pixels
+      finalWidth = printableWidth * pixelScale;
+      finalHeight = printableHeight * pixelScale;
+      bleedingX = ((printableWidth - productWidth) / 2) * pixelScale;
+      bleedingY = ((printableHeight - productHeight) / 2) * pixelScale;
+    } else {
+      // 3b. In Bleed mode, calculate final size based on bleedRatio
+      const bleeding = newWidth * bleedRatio;
+      finalWidth = newWidth + 2 * bleeding;
+      finalHeight = newHeight + 2 * bleeding;
+      bleedingX = bleeding;
+      bleedingY = bleeding;
+    }
 
     let finalX, finalY;
 
     // Horizontal alignment
     switch (alignment) {
       case 'left':
-        finalX = x - bleeding;
+        finalX = x - bleedingX;
         break;
       case 'right':
-        finalX = x + width - finalWidth + bleeding;
+        finalX = x + width - finalWidth + bleedingX;
         break;
       case 'top':
       case 'bottom':
@@ -404,10 +493,10 @@ export class ImageProcessorApp {
     // Vertical alignment
     switch (alignment) {
       case 'top':
-        finalY = y - bleeding;
+        finalY = y - bleedingY;
         break;
       case 'bottom':
-        finalY = y + height - finalHeight + bleeding;
+        finalY = y + height - finalHeight + bleedingY;
         break;
       case 'left':
       case 'right':
@@ -422,7 +511,8 @@ export class ImageProcessorApp {
       y: finalY,
       width: finalWidth,
       height: finalHeight,
-      bleeding: bleeding,
+      bleedingX: bleedingX,
+      bleedingY: bleedingY,
     };
   }
 
