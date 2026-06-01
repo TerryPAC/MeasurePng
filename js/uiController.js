@@ -127,6 +127,13 @@ export class ImageProcessorApp {
       this.elements.alphaThresholdValue
     );
 
+    this.elements.transformControls.addEventListener('toggle', () => {
+      if (this.elements.transformControls.open) {
+        this._updateSliderValuePosition(this.elements.rotationControl, this.elements.rotationValue);
+        this._updateSliderValuePosition(this.elements.scaleControl, this.elements.scaleValue);
+      }
+    });
+
     document.querySelectorAll('.copy-button').forEach(button => {
       button.addEventListener('click', async () => {
         const targetId = button.getAttribute('data-target');
@@ -198,7 +205,7 @@ export class ImageProcessorApp {
     this.state.isTransparentAreaModified = false;
     this.state.cornerSets = [];
     this.elements.confirmButton.style.visibility = 'hidden';
-    this.elements.transformControls.style.display = 'none';
+    this._hideTransformControls();
     this.elements.poInfo.querySelector('.info-content').textContent = '';
     this.elements.templateInfo.querySelector('.info-content').textContent = '';
     this.elements.positionsInfo.querySelector('.info-content').textContent = '';
@@ -272,7 +279,7 @@ export class ImageProcessorApp {
     this.state.cornerSets = [];
     this.transform.baseCornerSets = [];
     this.interactiveCtx.clearRect(0, 0, this.elements.interactiveCanvas.width, this.elements.interactiveCanvas.height);
-    this.elements.transformControls.style.display = 'none';
+    this._hideTransformControls();
     this.elements.calculateMarginsButton.style.visibility = 'hidden';
     this.elements.poInfo.querySelector('.info-content').textContent = '';
     this.elements.templateInfo.querySelector('.info-content').textContent = '';
@@ -374,12 +381,9 @@ export class ImageProcessorApp {
     );
 
     if (isMultiArea) {
-      this.elements.transformControls.style.display = 'none';
+      this._hideTransformControls();
     } else {
-      this.elements.transformControls.style.display = 'block';
-      // Update slider value positions after they become visible
-      this._updateSliderValuePosition(this.elements.rotationControl, this.elements.rotationValue);
-      this._updateSliderValuePosition(this.elements.scaleControl, this.elements.scaleValue);
+      this._showTransformControls();
     }
 
     this._updateInfoPanels();
@@ -974,6 +978,16 @@ export class ImageProcessorApp {
     const positionsOutput = allPositions.length === 1 ? allPositions[0] : allPositions;
     this.elements.positionsInfo.querySelector('.info-content').textContent = formatJSON(positionsOutput);
     this.elements.positionsInfo.style.display = 'block';
+  }
+
+  _hideTransformControls() {
+    const el = this.elements.transformControls;
+    el.style.display = 'none';
+    el.open = false;
+  }
+
+  _showTransformControls() {
+    this.elements.transformControls.style.display = 'block';
   }
 
   _updateSliderValuePosition(slider, output) {
