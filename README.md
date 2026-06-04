@@ -1,10 +1,10 @@
-# PNG Transparent Area Measurement Tool
+# Overlay Transparent Area Measurement Tool
 
-A web-based tool for measuring transparent areas in images, defining printable areas, and calculating custom margins. This tool helps designers and developers accurately set up print files.
+A web-based tool for measuring transparent areas in overlay images, defining printable areas, and calculating custom margins. This tool helps designers and developers accurately set up print files.
 
 ## Features
 
-- Upload PNG, JPEG, or WEBP images.
+- Upload overlay images in common formats (e.g. PNG, JPEG, WEBP).
 - Automatic detection of one or more transparent areas.
 - Manual adjustment of detected transparent areas by dragging their edges.
 - Define a printable area based on product aspect ratio and bleed values.
@@ -41,7 +41,7 @@ graph TD
 
 1.  **Upload Image**
     - Click the file input button.
-    - Select a PNG, JPEG, or WEBP image.
+    - Select an overlay image file.
     - The image will be displayed in the preview area.
 
 2.  **Set Parameters**

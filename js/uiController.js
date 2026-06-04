@@ -153,6 +153,17 @@ export class ImageProcessorApp {
     });
   }
 
+  _setResultInfoContent(container, text) {
+    const content = text ?? '';
+    container.querySelector('.info-content').textContent = content;
+    const hasContent = content.trim().length > 0;
+    container.classList.toggle('has-content', hasContent);
+    const copyButton = container.querySelector('.copy-button');
+    if (copyButton) {
+      copyButton.hidden = !hasContent;
+    }
+  }
+
   _handleCanvasScaleChange(e) {
     if (this.selectedImage) {
       this._setupCanvases();
@@ -206,10 +217,9 @@ export class ImageProcessorApp {
     this.state.cornerSets = [];
     this.elements.confirmButton.style.visibility = 'hidden';
     this._hideTransformControls();
-    this.elements.poInfo.querySelector('.info-content').textContent = '';
-    this.elements.templateInfo.querySelector('.info-content').textContent = '';
-    this.elements.positionsInfo.querySelector('.info-content').textContent = '';
-    this.elements.positionsInfo.style.display = 'none';
+    this._setResultInfoContent(this.elements.poInfo, '');
+    this._setResultInfoContent(this.elements.templateInfo, '');
+    this._setResultInfoContent(this.elements.positionsInfo, '');
     this.elements.calculateMarginsButton.style.visibility = 'hidden';
 
     this.transform.rotation = 0;
@@ -281,10 +291,9 @@ export class ImageProcessorApp {
     this.interactiveCtx.clearRect(0, 0, this.elements.interactiveCanvas.width, this.elements.interactiveCanvas.height);
     this._hideTransformControls();
     this.elements.calculateMarginsButton.style.visibility = 'hidden';
-    this.elements.poInfo.querySelector('.info-content').textContent = '';
-    this.elements.templateInfo.querySelector('.info-content').textContent = '';
-    this.elements.positionsInfo.querySelector('.info-content').textContent = '';
-    this.elements.positionsInfo.style.display = 'none';
+    this._setResultInfoContent(this.elements.poInfo, '');
+    this._setResultInfoContent(this.elements.templateInfo, '');
+    this._setResultInfoContent(this.elements.positionsInfo, '');
 
     const alphaThreshold = parseInt(this.elements.alphaThresholdControl.value, 10);
     this.state.transparentRects = detectTransparentArea(this.selectedImage, alphaThreshold);
@@ -886,8 +895,8 @@ export class ImageProcessorApp {
     const poOutput = poInfos.length === 1 ? poInfos[0] : poInfos;
     const templateOutput = templateInfos.length === 1 ? templateInfos[0] : templateInfos;
 
-    this.elements.poInfo.querySelector('.info-content').textContent = JSON.stringify(poOutput, null, 4);
-    this.elements.templateInfo.querySelector('.info-content').textContent = JSON.stringify(templateOutput, null, 4);
+    this._setResultInfoContent(this.elements.poInfo, JSON.stringify(poOutput, null, 4));
+    this._setResultInfoContent(this.elements.templateInfo, JSON.stringify(templateOutput, null, 4));
   }
 
   _calculateAndDisplayMargins() {
@@ -970,14 +979,13 @@ export class ImageProcessorApp {
     });
 
     const formatJSON = (obj) => JSON.stringify(obj, null, 4);
-    this.elements.poInfo.querySelector('.info-content').textContent = formatJSON(poContent);
-    this.elements.templateInfo.querySelector('.info-content').textContent = formatJSON(templateContent);
+    this._setResultInfoContent(this.elements.poInfo, formatJSON(poContent));
+    this._setResultInfoContent(this.elements.templateInfo, formatJSON(templateContent));
 
     // Update Positions info with all areas
     const allPositions = allAreasData.map(d => d.positions);
     const positionsOutput = allPositions.length === 1 ? allPositions[0] : allPositions;
-    this.elements.positionsInfo.querySelector('.info-content').textContent = formatJSON(positionsOutput);
-    this.elements.positionsInfo.style.display = 'block';
+    this._setResultInfoContent(this.elements.positionsInfo, formatJSON(positionsOutput));
   }
 
   _hideTransformControls() {
