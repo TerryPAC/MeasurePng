@@ -1,5 +1,6 @@
-# Triggered on a version tag (v1.0.0, v1.2.3, …).
-# Publishes the npm package AND deploys the GitHub Pages site in one release.
+# Triggered on a version tag (v1.0.0, v1.2.3, …), or manually via workflow_dispatch.
+# Tag push: publishes the npm package AND deploys GitHub Pages.
+# Manual run: deploys GitHub Pages only (no npm publish, no version bump).
 #
 # Setup required:
 #   1. Add Trusted Publisher on npmjs.com (Settings → Trusted Publishers)
@@ -13,6 +14,7 @@ on:
   push:
     tags:
       - 'v[0-9]*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -27,6 +29,7 @@ jobs:
   # ── Publish npm package ──────────────────────────────────────────────────────
   npm-publish:
     name: npm publish
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
