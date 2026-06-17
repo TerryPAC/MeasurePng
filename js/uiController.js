@@ -545,6 +545,7 @@ export class ImageProcessorApp {
     ctx.drawImage(img, offsetX, offsetY);
 
     // Draw transparent area rectangles (green)
+    const showEdgeLabels = this.state.finalRects.length === 0;
     this.state.transparentRects.forEach(transparentArea => {
       ctx.strokeStyle = 'green';
       ctx.lineWidth = 1;
@@ -555,6 +556,17 @@ export class ImageProcessorApp {
         transparentArea.height
       );
     });
+
+    if (showEdgeLabels && this.state.transparentRects.length > 0) {
+      this.interactiveCtx.clearRect(
+        0, 0,
+        this.elements.interactiveCanvas.width,
+        this.elements.interactiveCanvas.height
+      );
+      this.state.transparentRects.forEach(transparentArea => {
+        this._drawTransparentRectEdgeLabels(transparentArea, offsetX, offsetY);
+      });
+    }
 
     // Draw final red rectangles
     if (drawFinal) {
@@ -569,6 +581,43 @@ export class ImageProcessorApp {
         );
       });
     }
+  }
+
+  _drawCrispCanvasText(ctx, text, x, y, cssFontSize, fillStyle = '#FF1A1A') {
+    const canvas = ctx.canvas;
+    const bounds = canvas.getBoundingClientRect();
+    if (bounds.width === 0 || canvas.width === 0) return;
+
+    const displayScale = bounds.width / canvas.width;
+    const dpr = window.devicePixelRatio || 1;
+    const snappedX = Math.round(x * displayScale * dpr) / (displayScale * dpr);
+    const snappedY = Math.round(y * displayScale * dpr) / (displayScale * dpr);
+
+    ctx.save();
+    ctx.font = `400 ${cssFontSize / displayScale}px system-ui, -apple-system, "Segoe UI", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = fillStyle;
+    ctx.fillText(text, snappedX, snappedY);
+    ctx.restore();
+  }
+
+  _drawTransparentRectEdgeLabels(rect, offsetX, offsetY) {
+    const ctx = this.interactiveCtx;
+    const w = Math.round(Math.abs(rect.width));
+    const h = Math.round(Math.abs(rect.height));
+    const left = rect.x + offsetX;
+    const top = rect.y + offsetY;
+    const right = left + rect.width;
+    const bottom = top + rect.height;
+    const midX = (left + right) / 2;
+    const midY = (top + bottom) / 2;
+    const cssFontSize = 11;
+
+    this._drawCrispCanvasText(ctx, String(w), midX, top, cssFontSize);
+    this._drawCrispCanvasText(ctx, String(w), midX, bottom, cssFontSize);
+    this._drawCrispCanvasText(ctx, String(h), left, midY, cssFontSize);
+    this._drawCrispCanvasText(ctx, String(h), right, midY, cssFontSize);
   }
 
   _drawCorners() {
