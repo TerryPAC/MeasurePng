@@ -24,6 +24,10 @@
             --color-primary-soft: #ccfbf1;
             --color-accent: #0284c7;
             --color-accent-soft: #e0f2fe;
+            --overlay-color-transparent: rgb(0, 240, 0);
+            --overlay-color-printable: rgb(0, 0, 252);
+            --overlay-color-display: rgb(252, 0, 200);
+            --overlay-color-display-guide: rgba(252, 0, 200, 0.5);
             --color-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
             --color-shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08);
             --color-shadow-panel: -4px 0 24px rgba(15, 23, 42, 0.06);
@@ -67,6 +71,7 @@
             padding: 6px;
             background: var(--color-bg);
             box-sizing: border-box;
+            position: relative;
         }
 
         .canvas-container {
@@ -88,6 +93,33 @@
             max-width: 100%;
             max-height: 100%;
             object-fit: contain;
+        }
+
+        .image-size-badge {
+            position: absolute;
+            right: 18px;
+            bottom: 18px;
+            z-index: 5;
+            padding: 7px 10px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.72);
+            background: rgba(255, 255, 255, 0.76);
+            pointer-events: none;
+            user-select: none;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.1);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+        }
+
+        .image-size-badge__value {
+            display: block;
+            font-size: 11px;
+            font-weight: 500;
+            line-height: 1;
+            color: var(--color-text-muted);
+            font-family: var(--font-mono);
+            white-space: nowrap;
+            letter-spacing: 0;
         }
 
         .control-panel {
@@ -468,7 +500,7 @@
             width: 14px;
             height: 14px;
             margin-right: 10px;
-            border-width: 2px;
+            border-width: 1.5px;
             border-style: solid;
             background: transparent;
             border-radius: 2px;
@@ -476,15 +508,15 @@
         }
 
         .color-box.green {
-            border-color: rgb(0, 240, 0);
+            border-color: var(--overlay-color-transparent);
         }
 
         .color-box.blue {
-            border-color: rgb(0, 0, 252);
+            border-color: var(--overlay-color-printable);
         }
 
         .color-box.magenta {
-            border-color: rgb(252, 0, 200);
+            border-color: var(--overlay-color-display);
         }
 
         /* Buttons */
@@ -858,6 +890,9 @@
             <div class="canvas-container">
                 <canvas id="resultCanvas"></canvas>
                 <canvas id="interactiveCanvas"></canvas>
+            </div>
+            <div id="imageSizeBadge" class="image-size-badge" hidden>
+                <span id="imageSizeBadgeValue" class="image-size-badge__value"></span>
             </div>
         </div>
         <div class="control-panel">

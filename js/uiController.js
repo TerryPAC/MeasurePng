@@ -36,6 +36,8 @@ export class ImageProcessorApp {
       calculateMarginsButton: document.getElementById('calculateMarginsButton'),
       resultCanvas: document.getElementById('resultCanvas'),
       interactiveCanvas: document.getElementById('interactiveCanvas'),
+      imageSizeBadge: document.getElementById('imageSizeBadge'),
+      imageSizeBadgeValue: document.getElementById('imageSizeBadgeValue'),
       transformControls: document.getElementById('transformControls'),
       rotationControl: document.getElementById('rotationControl'),
       scaleControl: document.getElementById('scaleControl'),
@@ -47,6 +49,12 @@ export class ImageProcessorApp {
     };
     this.interactiveCtx = this.elements.interactiveCanvas.getContext('2d');
     this.selectedImage = null;
+    const rootStyles = getComputedStyle(document.documentElement);
+    this.overlayColors = {
+      transparent: rootStyles.getPropertyValue('--overlay-color-transparent').trim() || 'rgb(0, 240, 0)',
+      display: rootStyles.getPropertyValue('--overlay-color-display').trim() || 'rgb(252, 0, 200)',
+      displayGuide: rootStyles.getPropertyValue('--overlay-color-display-guide').trim() || 'rgba(252, 0, 200, 0.5)',
+    };
 
     this.state = {
       cornerSets: [], // Array of corner arrays for each area
@@ -247,6 +255,8 @@ export class ImageProcessorApp {
     if (resultCtx) {
       resultCtx.clearRect(0, 0, this.elements.resultCanvas.width, this.elements.resultCanvas.height);
     }
+
+    this._updateImageSizeBadge();
   }
 
   async _handleImageSelection(e) {
@@ -255,6 +265,7 @@ export class ImageProcessorApp {
       try {
         this.selectedImage = await this._loadImage(file);
         this._resetAppState();
+        this._updateImageSizeBadge();
         this._setupCanvases();
         this._drawResult();
       } catch (error) {
@@ -547,7 +558,7 @@ export class ImageProcessorApp {
     // Draw transparent area rectangles (green)
     const showEdgeLabels = this.state.finalRects.length === 0;
     this.state.transparentRects.forEach(transparentArea => {
-      ctx.strokeStyle = 'green';
+      ctx.strokeStyle = this.overlayColors.transparent;
       ctx.lineWidth = 1;
       ctx.strokeRect(
         transparentArea.x + offsetX,
@@ -581,6 +592,21 @@ export class ImageProcessorApp {
         );
       });
     }
+  }
+
+  _updateImageSizeBadge() {
+    const badge = this.elements.imageSizeBadge;
+    const badgeValue = this.elements.imageSizeBadgeValue;
+    if (!badge || !badgeValue) return;
+
+    if (!this.selectedImage) {
+      badgeValue.textContent = '';
+      badge.hidden = true;
+      return;
+    }
+
+    badgeValue.textContent = `${this.selectedImage.width} x ${this.selectedImage.height}px`;
+    badge.hidden = false;
   }
 
   _drawCrispCanvasText(ctx, text, x, y, cssFontSize, fillStyle = '#FF1A1A') {
@@ -635,7 +661,7 @@ export class ImageProcessorApp {
       
       // 1. Draw raw edge detection (green dashed) if it exists
       if (transparentRect && transparentRect.vertices) {
-        ctx.strokeStyle = 'green';
+        ctx.strokeStyle = this.overlayColors.transparent;
         ctx.setLineDash([5, 5]);
         ctx.beginPath();
         const v = transparentRect.vertices;
@@ -647,7 +673,7 @@ export class ImageProcessorApp {
       }
 
       // 2. Draw Display Area (magenta solid)
-      ctx.strokeStyle = 'magenta';
+      ctx.strokeStyle = this.overlayColors.display;
       ctx.setLineDash([]);
       ctx.beginPath();
       ctx.moveTo(corners[0].x + offsetX, corners[0].y + offsetY);
@@ -682,7 +708,7 @@ export class ImageProcessorApp {
     const originalLineWidth = ctx.lineWidth;
     const originalLineDash = ctx.getLineDash();
 
-    ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)'; // Semi-transparent magenta
+    ctx.strokeStyle = this.overlayColors.displayGuide;
     ctx.lineWidth = 2;
     ctx.setLineDash([6, 3]); // Dashed lines for guides
 
