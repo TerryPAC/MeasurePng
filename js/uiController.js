@@ -129,11 +129,12 @@ export class ImageProcessorApp {
       this._updateSliderValuePosition(slider, output);
     });
 
-    // Initialize slider position
-    this._updateSliderValuePosition(
-      this.elements.alphaThresholdControl,
-      this.elements.alphaThresholdValue
-    );
+    requestAnimationFrame(() => {
+      this._updateSliderValuePosition(
+        this.elements.alphaThresholdControl,
+        this.elements.alphaThresholdValue
+      );
+    });
 
     this.elements.transformControls.addEventListener('toggle', () => {
       if (this.elements.transformControls.open) {
@@ -1082,5 +1083,6 @@ export class ImageProcessorApp {
     const thumbWidth = 12; // Approximate thumb width in pixels
     const newPosition = percent * (sliderWidth - thumbWidth);
     output.style.left = `${slider.offsetLeft + newPosition + (thumbWidth / 2)}px`;
+    output.classList.add('is-positioned');
   }
 }

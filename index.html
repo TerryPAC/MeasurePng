@@ -634,6 +634,12 @@
             pointer-events: none;
             margin-top: 4px;
             z-index: 10;
+            opacity: 0;
+            transition: opacity 0.12s ease;
+        }
+
+        .slider-container output.is-positioned {
+            opacity: 1;
         }
 
         .slider-container label {
