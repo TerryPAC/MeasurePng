@@ -90,9 +90,11 @@
 
         .canvas-container canvas {
             position: absolute;
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            transform-origin: center center;
+            will-change: transform;
         }
 
         .image-size-badge {
@@ -100,15 +102,23 @@
             right: 18px;
             bottom: 18px;
             z-index: 5;
+            display: flex;
+            align-items: center;
+            gap: 10px;
             padding: 7px 10px;
             border-radius: 10px;
             border: 1px solid rgba(255, 255, 255, 0.72);
             background: rgba(255, 255, 255, 0.76);
-            pointer-events: none;
             user-select: none;
             box-shadow: 0 8px 20px rgba(15, 23, 42, 0.1);
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
+        }
+
+        .image-size-badge__meta {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
         }
 
         .image-size-badge__value {
@@ -120,6 +130,55 @@
             font-family: var(--font-mono);
             white-space: nowrap;
             letter-spacing: 0;
+        }
+
+        .image-size-badge__zoom {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .image-size-badge__zoom-value {
+            min-width: 34px;
+            text-align: center;
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1;
+            color: var(--color-text-subtle);
+            font-family: var(--font-mono);
+        }
+
+        .image-size-badge__button {
+            width: 22px;
+            height: 22px;
+            padding: 0;
+            border: 1px solid rgba(203, 213, 225, 0.85);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.72);
+            color: var(--color-text-subtle);
+            font-size: 13px;
+            line-height: 1;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+        }
+
+        .image-size-badge__button:hover:not(:disabled) {
+            background: rgba(240, 253, 250, 0.9);
+            border-color: rgba(13, 148, 136, 0.22);
+            color: #5b7c87;
+        }
+
+        .image-size-badge__button:focus-visible {
+            outline: 2px solid var(--color-primary);
+            outline-offset: 2px;
+        }
+
+        .image-size-badge__button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
         }
 
         .control-panel {
@@ -134,6 +193,7 @@
             overflow-y: auto;
             overflow-x: hidden;
             box-sizing: border-box;
+            position: relative;
         }
 
         /* Control Panel Header */
@@ -797,7 +857,7 @@
             background: var(--color-accent-soft);
             border: 1px solid #bae6fd;
             border-left: 4px solid var(--color-accent);
-            padding: 12px 40px 12px 12px;
+            padding: 12px;
             border-radius: var(--radius-md);
             position: relative;
             color: #0c4a6e;
@@ -807,45 +867,120 @@
             display: block;
         }
 
-        .result-info:not(.has-content) {
-            padding-right: 12px;
-        }
-
-        .result-info:not(.has-content) .copy-button {
+        .result-info:not(.has-content) .result-info__actions {
             display: none;
         }
 
-        .copy-button {
+        .info-content {
+            color: var(--color-text);
+        }
+
+        .result-info__actions {
             position: absolute;
-            right: 8px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: var(--color-surface);
-            border: 1px solid var(--color-border);
-            border-radius: var(--radius-sm);
+            right: 6px;
+            bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .result-action-button {
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            background: rgba(255, 255, 255, 0.42);
+            border: 1px solid rgba(226, 232, 240, 0.55);
+            border-radius: 999px;
             cursor: pointer;
-            padding: 6px;
-            color: var(--color-accent);
-            transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+            color: rgba(2, 132, 199, 0.8);
+            transition: background-color var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
             display: flex;
             align-items: center;
             justify-content: center;
+            backdrop-filter: blur(10px) saturate(140%);
+            -webkit-backdrop-filter: blur(10px) saturate(140%);
+            box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
         }
 
-        .copy-button:hover {
-            background: var(--color-accent-soft);
-            color: #0369a1;
-            border-color: #7dd3fc;
+        .result-action-button:hover {
+            background: rgba(224, 242, 254, 0.62);
+            color: rgba(3, 105, 161, 0.92);
+            border-color: rgba(125, 211, 252, 0.78);
         }
 
-        .copy-button:focus-visible {
+        .result-action-button:focus-visible {
             outline: 2px solid var(--color-accent);
             outline-offset: 2px;
         }
 
-        .copy-button svg {
-            width: 16px;
-            height: 16px;
+        .result-action-button svg {
+            width: 13px;
+            height: 13px;
+        }
+
+        .json-preview-popover {
+            position: absolute;
+            left: 20px;
+            right: 20px;
+            z-index: 12;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            max-height: 360px;
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: 14px;
+            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
+        }
+
+        .json-preview-popover[hidden] {
+            display: none;
+        }
+
+        .json-preview__header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 12px 14px 10px;
+            border-bottom: 1px solid var(--color-border);
+            background: linear-gradient(180deg, rgba(240, 249, 255, 0.8) 0%, rgba(255, 255, 255, 1) 100%);
+        }
+
+        .json-preview__title {
+            margin: 0;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--color-text-muted);
+        }
+
+        .json-preview__actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .json-preview__body {
+            padding: 0;
+            background: var(--color-surface-muted);
+        }
+
+        .json-preview__content {
+            margin: 0;
+            padding: 14px;
+            max-height: 300px;
+            overflow: auto;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            line-height: 1.65;
+            color: var(--color-text);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .json-preview__close {
+            font-size: 18px;
+            line-height: 1;
         }
 
         @media (prefers-reduced-motion: reduce) {
@@ -898,7 +1033,14 @@
                 <canvas id="interactiveCanvas"></canvas>
             </div>
             <div id="imageSizeBadge" class="image-size-badge" hidden>
-                <span id="imageSizeBadgeValue" class="image-size-badge__value"></span>
+                <div class="image-size-badge__meta">
+                    <span id="imageSizeBadgeValue" class="image-size-badge__value"></span>
+                </div>
+                <div class="image-size-badge__zoom" aria-label="Preview zoom controls">
+                    <button id="previewZoomOutButton" type="button" class="image-size-badge__button" aria-label="Zoom out preview">-</button>
+                    <span id="previewZoomValue" class="image-size-badge__zoom-value">100%</span>
+                    <button id="previewZoomInButton" type="button" class="image-size-badge__button" aria-label="Zoom in preview">+</button>
+                </div>
             </div>
         </div>
         <div class="control-panel">
@@ -993,32 +1135,73 @@
                     </div>
                 </div>
             </details>
-            <div class="result-info" id="poInfo">
+            <div class="result-info" id="poInfo" data-preview-title="JSON Preview">
                 <div class="info-content"></div>
-                <button class="copy-button" data-target="poInfo" hidden>
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                </button>
+                <div class="result-info__actions">
+                    <button class="result-action-button copy-button" data-target="poInfo" hidden aria-label="Copy PO JSON" title="Copy JSON">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                    <button class="result-action-button preview-button" data-target="poInfo" hidden aria-label="Preview formatted PO JSON" title="Preview formatted JSON">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M1.5 12s3.5-7 10.5-7 10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12z" />
+                            <circle cx="12" cy="12" r="3" stroke-width="2"></circle>
+                        </svg>
+                    </button>
+                </div>
             </div>
-            <div class="result-info" id="templateInfo">
+            <div class="result-info" id="templateInfo" data-preview-title="JSON Preview">
                 <div class="info-content"></div>
-                <button class="copy-button" data-target="templateInfo" hidden>
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                </button>
+                <div class="result-info__actions">
+                    <button class="result-action-button copy-button" data-target="templateInfo" hidden aria-label="Copy template JSON" title="Copy JSON">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                    <button class="result-action-button preview-button" data-target="templateInfo" hidden aria-label="Preview formatted template JSON" title="Preview formatted JSON">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M1.5 12s3.5-7 10.5-7 10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12z" />
+                            <circle cx="12" cy="12" r="3" stroke-width="2"></circle>
+                        </svg>
+                    </button>
+                </div>
             </div>
-            <div class="result-info" id="positionsInfo">
+            <div class="result-info" id="positionsInfo" data-preview-title="JSON Preview">
                 <div class="info-content"></div>
-                <button class="copy-button" data-target="positionsInfo" hidden>
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                </button>
+                <div class="result-info__actions">
+                    <button class="result-action-button copy-button" data-target="positionsInfo" hidden aria-label="Copy positions JSON" title="Copy JSON">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                    </button>
+                    <button class="result-action-button preview-button" data-target="positionsInfo" hidden aria-label="Preview formatted positions JSON" title="Preview formatted JSON">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M1.5 12s3.5-7 10.5-7 10.5 7 10.5 7-3.5 7-10.5 7S1.5 12 1.5 12z" />
+                            <circle cx="12" cy="12" r="3" stroke-width="2"></circle>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div id="jsonPreviewPopover" class="json-preview-popover" hidden>
+                <div class="json-preview__header">
+                    <h3 id="jsonPreviewTitle" class="json-preview__title">Formatted JSON</h3>
+                    <div class="json-preview__actions">
+                        <button id="jsonPreviewCopyButton" type="button" class="result-action-button" aria-label="Copy formatted JSON" title="Copy formatted JSON">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                        </button>
+                        <button id="jsonPreviewCloseButton" type="button" class="result-action-button json-preview__close" aria-label="Close JSON preview" title="Close">×</button>
+                    </div>
+                </div>
+                <div class="json-preview__body">
+                    <pre id="jsonPreviewContent" class="json-preview__content"></pre>
+                </div>
             </div>
         </div>
     </div>

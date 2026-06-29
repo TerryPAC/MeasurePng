@@ -34,10 +34,14 @@ export class OverlayMeasureApp {
       templateInfo: document.getElementById('templateInfo'),
       positionsInfo: document.getElementById('positionsInfo'),
       calculateMarginsButton: document.getElementById('calculateMarginsButton'),
+      canvasContainer: document.querySelector('.canvas-container'),
       resultCanvas: document.getElementById('resultCanvas'),
       interactiveCanvas: document.getElementById('interactiveCanvas'),
       imageSizeBadge: document.getElementById('imageSizeBadge'),
       imageSizeBadgeValue: document.getElementById('imageSizeBadgeValue'),
+      previewZoomOutButton: document.getElementById('previewZoomOutButton'),
+      previewZoomInButton: document.getElementById('previewZoomInButton'),
+      previewZoomValue: document.getElementById('previewZoomValue'),
       transformControls: document.getElementById('transformControls'),
       rotationControl: document.getElementById('rotationControl'),
       scaleControl: document.getElementById('scaleControl'),
@@ -46,6 +50,12 @@ export class OverlayMeasureApp {
       canvasScaleControl: document.getElementById('canvasScaleControl'),
       alphaThresholdControl: document.getElementById('alphaThresholdControl'),
       alphaThresholdValue: document.getElementById('alphaThresholdValue'),
+      controlPanel: document.querySelector('.control-panel'),
+      jsonPreviewPopover: document.getElementById('jsonPreviewPopover'),
+      jsonPreviewTitle: document.getElementById('jsonPreviewTitle'),
+      jsonPreviewContent: document.getElementById('jsonPreviewContent'),
+      jsonPreviewCopyButton: document.getElementById('jsonPreviewCopyButton'),
+      jsonPreviewCloseButton: document.getElementById('jsonPreviewCloseButton'),
     };
     this.interactiveCtx = this.elements.interactiveCanvas.getContext('2d');
     this.selectedImage = null;
@@ -71,6 +81,21 @@ export class OverlayMeasureApp {
 
     this.rafId = null;
     this.backgroundCanvas = document.createElement('canvas');
+    this.previewZoom = {
+      value: 1,
+      min: 0.5,
+      max: 3,
+      step: 0.25,
+      panX: 0,
+      panY: 0,
+      isPanning: false,
+      startClientX: 0,
+      startClientY: 0,
+      startPanX: 0,
+      startPanY: 0,
+      maxPanX: 0,
+      maxPanY: 0,
+    };
 
     this.transform = {
       rotation: 0,
@@ -92,6 +117,7 @@ export class OverlayMeasureApp {
     this.elements.interactiveCanvas.addEventListener('mousemove', (e) => this._handleMouseMove(e));
     this.elements.interactiveCanvas.addEventListener('mouseup', () => this._resetMouseState());
     this.elements.interactiveCanvas.addEventListener('mouseleave', () => this._resetMouseState());
+    window.addEventListener('mouseup', () => this._resetMouseState());
 
     this.elements.analyzeButton.addEventListener('click', () => this._analyzeImage());
     this.elements.confirmButton.addEventListener('click', () => this._confirmSelection());
@@ -121,6 +147,8 @@ export class OverlayMeasureApp {
     this.elements.canvasScaleControl.addEventListener('input', (e) => this._handleCanvasScaleChange(e));
 
     this.elements.toggleInputMode.addEventListener('click', () => this._toggleInputMode());
+    this.elements.previewZoomOutButton?.addEventListener('click', () => this._changePreviewZoom(-1));
+    this.elements.previewZoomInButton?.addEventListener('click', () => this._changePreviewZoom(1));
 
     this.elements.alphaThresholdControl.addEventListener('input', (e) => {
       const slider = e.target;
@@ -147,29 +175,117 @@ export class OverlayMeasureApp {
       button.addEventListener('click', async () => {
         const targetId = button.getAttribute('data-target');
         const targetElement = document.getElementById(targetId);
-        const textToCopy = targetElement.querySelector('.info-content').textContent.trim();
+        if (!targetElement) return;
 
-        try {
-          await navigator.clipboard.writeText(textToCopy);
-          const originalColor = button.style.color;
-          button.style.color = '#4CAF50';
-          setTimeout(() => { button.style.color = originalColor; }, 1000);
-        } catch (err) {
-          console.error('Copy failed!', err);
-          alert('Copy failed!');
-        }
+        const textToCopy = targetElement.querySelector('.info-content').textContent.trim();
+        await this._copyText(button, textToCopy);
       });
+    });
+
+    document.querySelectorAll('.preview-button').forEach(button => {
+      button.addEventListener('click', () => {
+        const targetId = button.getAttribute('data-target');
+        const targetElement = document.getElementById(targetId);
+        if (!targetElement) return;
+        this._openJsonPreview(targetElement);
+      });
+    });
+
+    this.elements.jsonPreviewCopyButton?.addEventListener('click', async () => {
+      const textToCopy = this.elements.jsonPreviewContent?.textContent || '';
+      await this._copyText(this.elements.jsonPreviewCopyButton, textToCopy);
+    });
+
+    this.elements.jsonPreviewCloseButton?.addEventListener('click', () => {
+      this._closeJsonPreview();
+    });
+
+    document.addEventListener('mousedown', (event) => {
+      if (!this.elements.jsonPreviewPopover || this.elements.jsonPreviewPopover.hidden) {
+        return;
+      }
+
+      const clickInsidePopover = this.elements.jsonPreviewPopover.contains(event.target);
+      const clickPreviewButton = event.target.closest?.('.preview-button');
+      if (!clickInsidePopover && !clickPreviewButton) {
+        this._closeJsonPreview();
+      }
     });
   }
 
   _setResultInfoContent(container, text) {
-    const content = text ?? '';
-    container.querySelector('.info-content').textContent = content;
-    const hasContent = content.trim().length > 0;
+    const content = (text ?? '').trim();
+    const infoContent = container.querySelector('.info-content');
+    infoContent.textContent = content;
+    container.dataset.formattedJson = content;
+    const hasContent = content.length > 0;
     container.classList.toggle('has-content', hasContent);
-    const copyButton = container.querySelector('.copy-button');
-    if (copyButton) {
-      copyButton.hidden = !hasContent;
+    container.querySelectorAll('.copy-button, .preview-button').forEach(button => {
+      button.hidden = !hasContent;
+    });
+
+    if (
+      !hasContent &&
+      this.elements.jsonPreviewPopover &&
+      !this.elements.jsonPreviewPopover.hidden &&
+      this.elements.jsonPreviewPopover.dataset.targetId === container.id
+    ) {
+      this._closeJsonPreview();
+    }
+  }
+
+  async _copyText(button, textToCopy) {
+    if (!textToCopy) return;
+
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      const originalColor = button.style.color;
+      button.style.color = '#4CAF50';
+      setTimeout(() => {
+        button.style.color = originalColor;
+      }, 1000);
+    } catch (err) {
+      console.error('Copy failed!', err);
+      alert('Copy failed!');
+    }
+  }
+
+  _openJsonPreview(container) {
+    const formatted = container.dataset.formattedJson || '';
+    if (!formatted || !this.elements.jsonPreviewPopover || !this.elements.controlPanel) return;
+
+    this.elements.jsonPreviewPopover.dataset.targetId = container.id;
+    if (this.elements.jsonPreviewTitle) {
+      this.elements.jsonPreviewTitle.textContent = container.dataset.previewTitle || 'Formatted JSON';
+    }
+    if (this.elements.jsonPreviewContent) {
+      this.elements.jsonPreviewContent.textContent = formatted;
+    }
+
+    const panel = this.elements.controlPanel;
+    const popover = this.elements.jsonPreviewPopover;
+    const panelScrollTop = panel.scrollTop;
+    const preferredTop = container.offsetTop + container.offsetHeight + 8;
+    popover.hidden = false;
+    popover.style.top = `${preferredTop}px`;
+
+    const popoverHeight = popover.offsetHeight;
+    const maxTop = panel.scrollHeight - popoverHeight - 12;
+    const minTop = panelScrollTop + 12;
+    let finalTop = Math.min(preferredTop, maxTop);
+
+    if (finalTop < minTop) {
+      const aboveTop = container.offsetTop - popoverHeight - 8;
+      finalTop = Math.max(minTop, aboveTop);
+    }
+
+    popover.style.top = `${Math.max(12, finalTop)}px`;
+  }
+
+  _closeJsonPreview() {
+    if (this.elements.jsonPreviewPopover) {
+      this.elements.jsonPreviewPopover.hidden = true;
+      delete this.elements.jsonPreviewPopover.dataset.targetId;
     }
   }
 
@@ -235,6 +351,12 @@ export class OverlayMeasureApp {
     this.transform.scale = 1;
     this.transform.originalRects = [];
     this.transform.baseCornerSets = [];
+    this.previewZoom.value = 1;
+    this.previewZoom.panX = 0;
+    this.previewZoom.panY = 0;
+    this.previewZoom.isPanning = false;
+    this.previewZoom.maxPanX = 0;
+    this.previewZoom.maxPanY = 0;
 
     this.elements.rotationControl.value = 0;
     this.elements.scaleControl.value = 100;
@@ -322,15 +444,27 @@ export class OverlayMeasureApp {
     this.state.canvasOffset.x = (canvasWidth - img.width) / 2;
     this.state.canvasOffset.y = (canvasHeight - img.height) / 2;
 
-    const container = document.querySelector('.canvas-container');
+    const container = this.elements.canvasContainer;
     const scale = this._calculateCanvasScale(canvasWidth, canvasHeight, container.clientWidth, container.clientHeight);
+    const displayWidth = canvasWidth * scale * this.previewZoom.value;
+    const displayHeight = canvasHeight * scale * this.previewZoom.value;
+    this.previewZoom.maxPanX = Math.max(0, (displayWidth - container.clientWidth) / 2);
+    this.previewZoom.maxPanY = Math.max(0, (displayHeight - container.clientHeight) / 2);
+    if (this.previewZoom.maxPanX === 0) {
+      this.previewZoom.panX = 0;
+    }
+    if (this.previewZoom.maxPanY === 0) {
+      this.previewZoom.panY = 0;
+    }
+    this._clampPreviewPan();
 
     [this.elements.resultCanvas, this.elements.interactiveCanvas].forEach(canvas => {
       canvas.width = canvasWidth;
       canvas.height = canvasHeight;
-      canvas.style.width = `${canvasWidth * scale}px`;
-      canvas.style.height = `${canvasHeight * scale}px`;
+      canvas.style.width = `${displayWidth}px`;
+      canvas.style.height = `${displayHeight}px`;
     });
+    this._applyPreviewPan();
 
     // Setup background canvas
     this.backgroundCanvas.width = canvasWidth;
@@ -598,16 +732,69 @@ export class OverlayMeasureApp {
   _updateImageSizeBadge() {
     const badge = this.elements.imageSizeBadge;
     const badgeValue = this.elements.imageSizeBadgeValue;
+    const zoomValue = this.elements.previewZoomValue;
+    const zoomOutButton = this.elements.previewZoomOutButton;
+    const zoomInButton = this.elements.previewZoomInButton;
     if (!badge || !badgeValue) return;
 
     if (!this.selectedImage) {
       badgeValue.textContent = '';
+      if (zoomValue) {
+        zoomValue.textContent = '100%';
+      }
+      if (zoomOutButton) {
+        zoomOutButton.disabled = true;
+      }
+      if (zoomInButton) {
+        zoomInButton.disabled = true;
+      }
       badge.hidden = true;
       return;
     }
 
     badgeValue.textContent = `${this.selectedImage.width} x ${this.selectedImage.height}px`;
+    if (zoomValue) {
+      zoomValue.textContent = `${Math.round(this.previewZoom.value * 100)}%`;
+    }
+    if (zoomOutButton) {
+      zoomOutButton.disabled = this.previewZoom.value <= this.previewZoom.min;
+    }
+    if (zoomInButton) {
+      zoomInButton.disabled = this.previewZoom.value >= this.previewZoom.max;
+    }
     badge.hidden = false;
+  }
+
+  _changePreviewZoom(direction) {
+    if (!this.selectedImage) return;
+
+    const nextValue = this.previewZoom.value + direction * this.previewZoom.step;
+    this.previewZoom.value = Math.min(
+      this.previewZoom.max,
+      Math.max(this.previewZoom.min, Number(nextValue.toFixed(2)))
+    );
+    this._setupCanvases();
+    this._drawResult(this.state.finalRects.length > 0);
+    if (this.state.finalRects.length > 0) {
+      this._drawCorners();
+    }
+    this._updateImageSizeBadge();
+  }
+
+  _canPanPreview() {
+    return this.selectedImage && (this.previewZoom.maxPanX > 0 || this.previewZoom.maxPanY > 0);
+  }
+
+  _clampPreviewPan() {
+    this.previewZoom.panX = Math.min(this.previewZoom.maxPanX, Math.max(-this.previewZoom.maxPanX, this.previewZoom.panX));
+    this.previewZoom.panY = Math.min(this.previewZoom.maxPanY, Math.max(-this.previewZoom.maxPanY, this.previewZoom.panY));
+  }
+
+  _applyPreviewPan() {
+    const transform = `translate(-50%, -50%) translate(${this.previewZoom.panX}px, ${this.previewZoom.panY}px)`;
+    [this.elements.resultCanvas, this.elements.interactiveCanvas].forEach(canvas => {
+      canvas.style.transform = transform;
+    });
   }
 
   _drawCrispCanvasText(ctx, text, x, y, cssFontSize, fillStyle = '#FF1A1A') {
@@ -812,6 +999,7 @@ export class OverlayMeasureApp {
       this.state.selectedCornerInfo = this._findClosestCorner(mousePos);
       if (this.state.selectedCornerInfo) {
         this.state.isDragging = true;
+        return;
       }
     } else if (this.state.transparentRects.length > 0) {
       this.state.selectedEdgeInfo = this._findClosestEdge(mousePos);
@@ -819,7 +1007,17 @@ export class OverlayMeasureApp {
         this.state.isDragging = true;
         this.state.originalMousePos = mousePos;
         this.state.isTransparentAreaModified = true;
+        return;
       }
+    }
+
+    if (this._canPanPreview()) {
+      this.previewZoom.isPanning = true;
+      this.previewZoom.startClientX = e.clientX;
+      this.previewZoom.startClientY = e.clientY;
+      this.previewZoom.startPanX = this.previewZoom.panX;
+      this.previewZoom.startPanY = this.previewZoom.panY;
+      this.elements.interactiveCanvas.style.cursor = 'grabbing';
     }
   }
 
@@ -840,6 +1038,15 @@ export class OverlayMeasureApp {
     const mousePos = this._getMousePos(e).image;
     let cursorStyle = 'default';
 
+    if (this.previewZoom.isPanning) {
+      this.previewZoom.panX = this.previewZoom.startPanX + (e.clientX - this.previewZoom.startClientX);
+      this.previewZoom.panY = this.previewZoom.startPanY + (e.clientY - this.previewZoom.startClientY);
+      this._clampPreviewPan();
+      this._applyPreviewPan();
+      this.elements.interactiveCanvas.style.cursor = 'grabbing';
+      return;
+    }
+
     if (this.state.isDragging) {
       if (this.state.selectedCornerInfo) {
         const { areaIndex, cornerIndex } = this.state.selectedCornerInfo;
@@ -852,9 +1059,15 @@ export class OverlayMeasureApp {
     } else {
       // Handle hover effects
       if (this.state.finalRects.length > 0) {
-        if (this._findClosestCorner(mousePos)) cursorStyle = 'pointer';
-      } else if (this.state.transparentRects.length > 0) {
-        if (this._findClosestEdge(mousePos)) cursorStyle = 'move';
+        if (this._findClosestCorner(mousePos)) {
+          cursorStyle = 'pointer';
+        } else if (this._canPanPreview()) {
+          cursorStyle = 'grab';
+        }
+      } else if (this.state.transparentRects.length > 0 && this._findClosestEdge(mousePos)) {
+        cursorStyle = 'move';
+      } else if (this._canPanPreview()) {
+        cursorStyle = 'grab';
       }
     }
     this.elements.interactiveCanvas.style.cursor = cursorStyle;
@@ -905,6 +1118,8 @@ export class OverlayMeasureApp {
     this.state.selectedCornerInfo = null;
     this.state.selectedEdgeInfo = null;
     this.state.originalMousePos = null;
+    this.previewZoom.isPanning = false;
+    this.elements.interactiveCanvas.style.cursor = this._canPanPreview() ? 'grab' : 'default';
   }
 
   _inverseTransformPoint(point, center) {
