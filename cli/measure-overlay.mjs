@@ -91,7 +91,7 @@ process.stderr.write(`[measure-png-overlay] decoded: ${imgWidth}x${imgHeight}\n`
 
 // ── Detection ─────────────────────────────────────────────────────────────────
 const jsDir = path.resolve(__dirname, '..', 'js');
-const { detectTransparentAreaCore } = await import(path.join(jsDir, 'imageProcessor.js'));
+const { detectTransparentAreaCore } = await import(path.join(jsDir, 'transparentDetector.js'));
 const { intersectHoughLines, orderQuadVertices } = await import(path.join(jsDir, 'quadDetector.js'));
 
 const ALPHA_THRESHOLD = 192;

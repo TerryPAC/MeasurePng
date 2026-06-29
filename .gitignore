@@ -110,8 +110,9 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 
-# .graphifyignore
-node_modules/
+# Local documentation (not tracked)
+doc/
+
 dist/
 *.generated.py
 

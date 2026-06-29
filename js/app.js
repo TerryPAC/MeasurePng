@@ -1,7 +1,7 @@
-import { ImageProcessorApp } from './uiController.js';
+import { OverlayMeasureApp } from './uiController.js';
 
 // Initialize event listeners
 document.addEventListener('DOMContentLoaded', () => {
-  const app = new ImageProcessorApp();
+  const app = new OverlayMeasureApp();
   app.init();
 });

@@ -8,7 +8,7 @@
   },
   "files": [
     "cli/",
-    "js/imageProcessor.js",
+    "js/transparentDetector.js",
     "js/quadDetector.js",
     "js/constants.js"
   ],

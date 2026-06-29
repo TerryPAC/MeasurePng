@@ -10,10 +10,10 @@ import {
   scalePoint,
   pointToLineDistance
 } from './utils.js';
-import { detectTransparentArea } from './imageProcessor.js';
+import { detectTransparentArea } from './transparentDetector.js';
 import { intersectHoughLines, orderQuadVertices } from './quadDetector.js';
 
-export class ImageProcessorApp {
+export class OverlayMeasureApp {
   constructor() {
     this.elements = {
       imageInput: document.getElementById('imageInput'),
