@@ -56,6 +56,7 @@ export class OverlayMeasureApp {
       jsonPreviewContent: document.getElementById('jsonPreviewContent'),
       jsonPreviewCopyButton: document.getElementById('jsonPreviewCopyButton'),
       jsonPreviewCloseButton: document.getElementById('jsonPreviewCloseButton'),
+      toastContainer: document.getElementById('toastContainer'),
     };
     this.interactiveCtx = this.elements.interactiveCanvas.getContext('2d');
     this.selectedImage = null;
@@ -112,6 +113,7 @@ export class OverlayMeasureApp {
 
   _addEventListeners() {
     this.elements.imageInput.addEventListener('change', (e) => this._handleImageSelection(e));
+    document.addEventListener('paste', (e) => this._handleImagePaste(e));
 
     this.elements.interactiveCanvas.addEventListener('mousedown', (e) => this._handleMouseDown(e));
     this.elements.interactiveCanvas.addEventListener('mousemove', (e) => this._handleMouseMove(e));
@@ -386,16 +388,68 @@ export class OverlayMeasureApp {
     const file = e.target.files[0];
     if (file) {
       try {
-        this.selectedImage = await this._loadImage(file);
-        this._resetAppState();
-        this._updateImageSizeBadge();
-        this._setupCanvases();
-        this._drawResult();
+        await this._processImageFile(file);
       } catch (error) {
         console.error('Image loading failed:', error);
         alert('Failed to load image.');
       }
     }
+  }
+
+  async _handleImagePaste(e) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (!item.type.startsWith('image/')) continue;
+
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (!file) {
+        this._showToast('Unable to read image from clipboard.', 'error');
+        return;
+      }
+
+      try {
+        await this._processImageFile(file);
+        const { width, height } = this.selectedImage;
+        this._showToast(`Image pasted (${width} × ${height})`, 'success');
+      } catch (error) {
+        console.error('Image paste failed:', error);
+        this._showToast('Failed to paste image.', 'error');
+      }
+      return;
+    }
+  }
+
+  async _processImageFile(file) {
+    this.selectedImage = await this._loadImage(file);
+    this._resetAppState();
+    this._updateImageSizeBadge();
+    this._setupCanvases();
+    this._drawResult();
+  }
+
+  _showToast(message, type = 'success') {
+    const container = this.elements.toastContainer;
+    if (!container) return;
+
+    const toast = document.createElement('div');
+    toast.className = `toast toast--${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+
+    requestAnimationFrame(() => {
+      toast.classList.add('is-visible');
+    });
+
+    const dismiss = () => {
+      toast.classList.remove('is-visible');
+      toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+      setTimeout(() => toast.remove(), 300);
+    };
+
+    setTimeout(dismiss, 2800);
   }
 
   _loadImage(file) {
